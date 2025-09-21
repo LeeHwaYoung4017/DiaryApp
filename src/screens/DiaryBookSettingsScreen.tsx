@@ -51,7 +51,7 @@ export default function DiaryBookSettingsScreen({ navigation, route }: any) {
     }
 
     try {
-      // 일기장 이름 업데이트 (실제 구현에서는 DatabaseService에 updateDiaryBook 메서드 필요)
+      await DatabaseService.updateDiaryBook(diaryBook.id, newName.trim());
       Alert.alert('성공', '일기장 이름이 변경되었습니다.', [
         { text: '확인', onPress: () => navigation.goBack() }
       ]);

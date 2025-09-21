@@ -11,7 +11,6 @@ import { Diary } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG } from '../constants';
 
-const { width } = Dimensions.get('window');
 
 export default function ChartScreen() {
   const [diaries, setDiaries] = useState<Diary[]>([]);
@@ -126,7 +125,7 @@ export default function ChartScreen() {
 
     let currentAngle = 0;
     const radius = 80;
-    const centerX = width / 2 - 16;
+    const centerX = Dimensions.get('window').width / 2 - 16;
     const centerY = 100;
 
     return (

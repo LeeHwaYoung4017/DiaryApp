@@ -284,6 +284,16 @@ class DatabaseService {
     await this.setSetting('currentDiaryBookId', diaryBookId);
   }
 
+  async updateDiaryBook(diaryBookId: string, name: string): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    const now = Date.now();
+    await this.db.runAsync(
+      'UPDATE diary_books SET name = ?, updated_at = ? WHERE id = ?',
+      [name, now, diaryBookId]
+    );
+  }
+
   // 일기 CRUD 작업
   async createDiary(diary: Omit<Diary, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');

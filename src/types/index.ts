@@ -63,6 +63,7 @@ export type RootStackParamList = {
   ThemeSettings: undefined;
   GoogleDriveSettings: undefined;
   LanguageSettings: undefined;
+  DiaryDetail: { diaryId: string };
 };
 
 // 일기장 관련 타입 정의

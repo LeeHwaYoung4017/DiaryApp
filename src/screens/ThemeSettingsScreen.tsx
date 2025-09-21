@@ -11,8 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DatabaseService from '../services/database/DatabaseService';
 
-const { width } = Dimensions.get('window');
-const itemWidth = (width - 48) / 6; // 6개씩 배치
+const itemWidth = (Dimensions.get('window').width - 48) / 6; // 6개씩 배치
 
 // 36개 커스텀 컬러 팔레트
 const CUSTOM_COLORS = [

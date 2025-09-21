@@ -15,6 +15,7 @@ import SecuritySettingsScreen from '../screens/SecuritySettingsScreen';
 import ThemeSettingsScreen from '../screens/ThemeSettingsScreen';
 import GoogleDriveSettingsScreen from '../screens/GoogleDriveSettingsScreen';
 import LanguageSettingsScreen from '../screens/LanguageSettingsScreen';
+import DiaryDetailScreen from '../screens/DiaryDetailScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -115,6 +116,14 @@ export default function AppNavigator() {
           component={LanguageSettingsScreen}
           options={{
             title: '언어선택',
+            headerBackTitle: '뒤로',
+          }}
+        />
+        <Stack.Screen
+          name="DiaryDetail"
+          component={DiaryDetailScreen}
+          options={{
+            title: '일기 상세',
             headerBackTitle: '뒤로',
           }}
         />

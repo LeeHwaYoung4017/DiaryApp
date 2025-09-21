@@ -9,7 +9,11 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { Diary, MoodType } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, APP_CONFIG } from '../constants';
@@ -20,23 +24,100 @@ export default function WriteScreen({ navigation }: any) {
   const [mood, setMood] = useState<MoodType>(3);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [images, setImages] = useState<string[]>([]);
 
-  useEffect(() => {
-    // 자동 저장 타이머 설정
-    const autoSaveTimer = setInterval(() => {
-      if (title || content) {
-        // TODO: 초안 저장 구현
-        console.log('자동 저장...');
+  // 이미지 선택 함수들
+  const pickImageFromCamera = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '카메라 권한이 필요합니다.');
+        return;
       }
-    }, 30000); // 30초마다
 
-    return () => clearInterval(autoSaveTimer);
-  }, [title, content]);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setImages(prev => [...prev, result.assets[0].uri]);
+      }
+    } catch (error) {
+      console.error('카메라 오류:', error);
+      Alert.alert('오류', '카메라를 사용할 수 없습니다.');
+    }
+  };
+
+  const pickImageFromGallery = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '갤러리 권한이 필요합니다.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => asset.uri);
+        setImages(prev => [...prev, ...newImages]);
+      }
+    } catch (error) {
+      console.error('갤러리 오류:', error);
+      Alert.alert('오류', '갤러리를 사용할 수 없습니다.');
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
+
 
   const handleSave = async () => {
     if (!title.trim() && !content.trim()) {
       Alert.alert('알림', '제목 또는 내용을 입력해주세요.');
       return;
+    }
+
+    // 일기장별 1일 1회 작성 제한 확인
+    try {
+      const currentDiaryBookId = await DatabaseService.getCurrentDiaryBookId();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      // 오늘 날짜 범위로 일기 검색
+      const todayStart = today.getTime();
+      const todayEnd = tomorrow.getTime();
+      
+      const existingDiaries = await DatabaseService.getDiaries(1000, 0, currentDiaryBookId);
+      const todayDiary = existingDiaries.find(diary => {
+        const diaryTime = diary.created_at;
+        return diaryTime >= todayStart && diaryTime < todayEnd;
+      });
+      
+      if (todayDiary) {
+        Alert.alert(
+          '알림', 
+          '오늘은 이미 일기를 작성하셨습니다.\n기존 일기를 수정하시겠습니까?',
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '수정', onPress: () => navigation.navigate('Edit', { diaryId: todayDiary.id }) }
+          ]
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('일기 중복 확인 실패:', error);
     }
 
     try {
@@ -47,13 +128,13 @@ export default function WriteScreen({ navigation }: any) {
         pinned: false,
         is_encrypted: false,
         tags,
-        images: [], // TODO: 이미지 첨부 기능 구현
+        images,
         metadata: {},
       };
 
       await DatabaseService.createDiary(diaryData);
       Alert.alert('성공', '일기가 저장되었습니다.', [
-        { text: '확인', onPress: () => navigation.goBack() }
+        { text: '확인', onPress: () => navigation.navigate('Feed') }
       ]);
     } catch (error) {
       console.error('일기 저장 실패:', error);
@@ -62,9 +143,13 @@ export default function WriteScreen({ navigation }: any) {
   };
 
   const addTag = () => {
-    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      setTags([...tags, tagInput.trim()]);
-      setTagInput('');
+    if (tagInput.trim()) {
+      // 쉼표로 구분된 태그들을 분리
+      const newTags = tagInput.split(',').map(tag => tag.trim()).filter(tag => tag && !tags.includes(tag));
+      if (newTags.length > 0) {
+        setTags([...tags, ...newTags]);
+        setTagInput('');
+      }
     }
   };
 
@@ -73,10 +158,11 @@ export default function WriteScreen({ navigation }: any) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* 제목 입력 */}
         <View style={styles.section}>
@@ -140,15 +226,39 @@ export default function WriteScreen({ navigation }: any) {
         <View style={styles.section}>
           <Text style={styles.label}>사진</Text>
           <View style={styles.imageContainer}>
-            <TouchableOpacity style={styles.imageButton}>
+            <TouchableOpacity 
+              style={styles.imageButton}
+              onPress={pickImageFromCamera}
+            >
               <Text style={styles.imageButtonText}>📷 카메라</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.imageButton}>
+            <TouchableOpacity 
+              style={styles.imageButton}
+              onPress={pickImageFromGallery}
+            >
               <Text style={styles.imageButtonText}>🖼️ 갤러리</Text>
             </TouchableOpacity>
           </View>
+          
+          {/* 이미지 미리보기 */}
+          {images.length > 0 && (
+            <View style={styles.imagePreviewContainer}>
+              {images.map((imageUri, index) => (
+                <View key={index} style={styles.imagePreviewItem}>
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => removeImage(index)}
+                  >
+                    <Text style={styles.removeImageText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+          
           <Text style={styles.imageNote}>
-            최대 {APP_CONFIG.maxImagesPerDiary}장까지 첨부 가능
+            최대 {APP_CONFIG.maxImagesPerDiary}장까지 첨부 가능 ({images.length}/{APP_CONFIG.maxImagesPerDiary})
           </Text>
         </View>
 
@@ -160,7 +270,7 @@ export default function WriteScreen({ navigation }: any) {
               style={styles.tagInput}
               value={tagInput}
               onChangeText={setTagInput}
-              placeholder="태그를 입력하세요..."
+              placeholder="태그를 입력하세요 (쉼표로 구분)"
               onSubmitEditing={addTag}
               returnKeyType="done"
             />
@@ -185,13 +295,15 @@ export default function WriteScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
+
       {/* 저장 버튼 */}
       <View style={styles.saveButtonContainer}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>저장</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -199,6 +311,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
@@ -288,6 +403,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     marginTop: 8,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  imagePreviewItem: {
+    position: 'relative',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  imagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeImageText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   tagInputContainer: {
     flexDirection: 'row',

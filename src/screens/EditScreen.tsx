@@ -68,7 +68,7 @@ export default function EditScreen({ navigation, route }: any) {
       });
 
       Alert.alert('성공', '일기가 수정되었습니다.', [
-        { text: '확인', onPress: () => navigation.goBack() }
+        { text: '확인', onPress: () => navigation.navigate('Feed') }
       ]);
     } catch (error) {
       console.error('일기 수정 실패:', error);
@@ -89,7 +89,7 @@ export default function EditScreen({ navigation, route }: any) {
             try {
               await DatabaseService.deleteDiary(diaryId);
               Alert.alert('성공', '일기가 삭제되었습니다.', [
-                { text: '확인', onPress: () => navigation.goBack() }
+                { text: '확인', onPress: () => navigation.navigate('Feed') }
               ]);
             } catch (error) {
               console.error('일기 삭제 실패:', error);
@@ -244,12 +244,18 @@ export default function EditScreen({ navigation, route }: any) {
             </View>
           )}
         </View>
+        
+        {/* 하단 버튼 공간 확보 */}
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {/* 버튼들 */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteButtonText}>삭제</Text>
+        <TouchableOpacity 
+          style={styles.cancelButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.cancelButtonText}>취소</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>저장</Text>
@@ -431,15 +437,15 @@ const styles = StyleSheet.create({
     borderTopColor: '#E5E5E5',
     gap: 12,
   },
-  deleteButton: {
+  cancelButton: {
     flex: 1,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#F2F2F7',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
   },
-  deleteButtonText: {
-    color: '#FFFFFF',
+  cancelButtonText: {
+    color: '#8E8E93',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -454,5 +460,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  bottomSpacer: {
+    height: 100, // 하단 버튼 공간 확보
   },
 });
