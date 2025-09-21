@@ -7,6 +7,7 @@ import {
   Alert,
   Switch,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -18,6 +19,7 @@ export default function SecuritySettingsScreen() {
   const navigation = useNavigation();
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLockTypeModal, setShowLockTypeModal] = useState(false);
 
   useEffect(() => {
     loadSecuritySettings();
@@ -33,11 +35,13 @@ export default function SecuritySettingsScreen() {
     try {
       setLoading(true);
       const settings = await DatabaseService.getSecuritySettings();
+      console.log('SecuritySettingsScreen - 로드된 설정:', settings);
       if (settings) {
         setSecuritySettings(settings);
       } else {
         // 기본 설정 생성
         const defaultSettings = SecurityService.getDefaultSecuritySettings();
+        console.log('SecuritySettingsScreen - 기본 설정 사용:', defaultSettings);
         setSecuritySettings(defaultSettings);
       }
     } catch (error) {
@@ -72,11 +76,11 @@ export default function SecuritySettingsScreen() {
   };
 
   const navigateToPatternSetup = (isFirstTime: boolean) => {
-    Alert.alert('패턴 설정', '패턴 잠금 기능은 아직 구현 중입니다.');
+    (navigation as any).navigate('PatternSetup', { isFirstTime });
   };
 
   const navigateToBiometricSetup = () => {
-    Alert.alert('생체인증 설정', '생체인증 기능은 아직 구현 중입니다.');
+    (navigation as any).navigate('BiometricSetup');
   };
 
   const disableLock = async () => {
@@ -115,16 +119,23 @@ export default function SecuritySettingsScreen() {
   };
 
   const changeLockType = () => {
-    Alert.alert(
-      '잠금 방식 변경',
-      '새로운 잠금 방식을 선택하세요:',
-      [
-        { text: 'PIN', onPress: () => navigateToPinSetup(false) },
-        { text: '패턴', onPress: () => navigateToPatternSetup(false) },
-        { text: '생체인증', onPress: () => navigateToBiometricSetup() },
-        { text: '취소', style: 'cancel' }
-      ]
-    );
+    setShowLockTypeModal(true);
+  };
+
+  const handleLockTypeSelect = (lockType: 'pin' | 'pattern' | 'biometric') => {
+    setShowLockTypeModal(false);
+    
+    switch (lockType) {
+      case 'pin':
+        navigateToPinSetup(false);
+        break;
+      case 'pattern':
+        navigateToPatternSetup(false);
+        break;
+      case 'biometric':
+        navigateToBiometricSetup();
+        break;
+    }
   };
 
   if (loading) {
@@ -218,6 +229,51 @@ export default function SecuritySettingsScreen() {
             </>
           )}
         </View>
+
+        {/* 잠금 방식 선택 모달 */}
+        <Modal
+          visible={showLockTypeModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowLockTypeModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>잠금 방식 선택</Text>
+              
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => handleLockTypeSelect('pin')}
+              >
+                <Text style={styles.modalOptionText}>PIN</Text>
+                <Text style={styles.modalOptionSubtext}>4-8자리 숫자</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => handleLockTypeSelect('pattern')}
+              >
+                <Text style={styles.modalOptionText}>패턴</Text>
+                <Text style={styles.modalOptionSubtext}>3x3 그리드 패턴</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => handleLockTypeSelect('biometric')}
+              >
+                <Text style={styles.modalOptionText}>생체인증</Text>
+                <Text style={styles.modalOptionSubtext}>지문/얼굴 인식</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowLockTypeModal(false)}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>보안 정보</Text>
@@ -316,5 +372,52 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     lineHeight: 20,
     marginBottom: 8,
+  },
+  // 모달 스타일
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalOption: {
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  modalOptionSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
+  modalCancelButton: {
+    marginTop: 10,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    fontWeight: '600',
   },
 });

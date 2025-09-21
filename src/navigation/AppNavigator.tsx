@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import * as SQLite from 'expo-sqlite';
 import { RootStackParamList } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { SecuritySettings } from '../types';
@@ -20,6 +21,8 @@ import GoogleDriveSettingsScreen from '../screens/GoogleDriveSettingsScreen';
 import LanguageSettingsScreen from '../screens/LanguageSettingsScreen';
 import DiaryDetailScreen from '../screens/DiaryDetailScreen';
 import PinSetupScreen from '../screens/PinSetupScreen';
+import PatternSetupScreen from '../screens/PatternSetupScreen';
+import BiometricSetupScreen from '../screens/BiometricSetupScreen';
 import AppLockScreen from '../screens/AppLockScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -33,7 +36,7 @@ export default function AppNavigator() {
   const navigationRef = useRef<any>(null);
 
   useEffect(() => {
-    checkAppLock();
+    initializeApp();
     
     // AppState 변경 감지
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
@@ -47,6 +50,35 @@ export default function AppNavigator() {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
   }, []);
+
+  const initializeApp = async () => {
+    try {
+      // 데이터베이스 초기화 (기존 데이터 보존)
+      await DatabaseService.init();
+      console.log('데이터베이스 초기화 완료');
+      
+      // 기존 일기가 있는지 확인
+      const existingDiaries = await DatabaseService.getDiaries(1, 0, 'default-diary-book');
+      
+      // 기존 일기가 없으면 가데이터 생성
+      if (existingDiaries.length === 0) {
+        await DatabaseService.generateSampleData();
+        console.log('가데이터 생성 완료');
+      } else {
+        console.log('기존 데이터 사용');
+      }
+      
+      console.log('앱 초기화 완료');
+      
+      // 앱 잠금 상태 확인
+      await checkAppLock();
+    } catch (error) {
+      console.error('앱 초기화 실패:', error);
+      // 초기화 실패 시에도 기본 화면으로 이동
+      setInitialRouteName('Feed');
+      setIsLocked(false);
+    }
+  };
 
   const handleAppForeground = async () => {
     try {
@@ -75,6 +107,7 @@ export default function AppNavigator() {
       }
     } catch (error) {
       console.error('앱 잠금 확인 실패:', error);
+      // 오류 발생 시 기본적으로 잠금 해제 상태로 설정
       setIsLocked(false);
       setInitialRouteName('Feed');
     }
@@ -202,6 +235,22 @@ export default function AppNavigator() {
           component={PinSetupScreen}
           options={{
             title: 'PIN 설정',
+            headerBackTitle: '뒤로',
+          }}
+        />
+        <Stack.Screen
+          name="PatternSetup"
+          component={PatternSetupScreen}
+          options={{
+            title: '패턴 설정',
+            headerBackTitle: '뒤로',
+          }}
+        />
+        <Stack.Screen
+          name="BiometricSetup"
+          component={BiometricSetupScreen}
+          options={{
+            title: '생체인증 설정',
             headerBackTitle: '뒤로',
           }}
         />

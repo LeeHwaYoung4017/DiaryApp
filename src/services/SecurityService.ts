@@ -46,17 +46,17 @@ class SecurityService {
   }
 
   // 생체 인증 실행
-  async authenticateWithBiometric(): Promise<boolean> {
+  async authenticateWithBiometrics(): Promise<{ success: boolean; error?: string }> {
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: '일기 앱 잠금을 해제하려면 생체 인증을 사용하세요',
         fallbackLabel: 'PIN 코드 사용',
         cancelLabel: '취소',
       });
-      return result.success;
+      return { success: result.success };
     } catch (error) {
       console.error('생체 인증 실패:', error);
-      return false;
+      return { success: false, error: error.message };
     }
   }
 

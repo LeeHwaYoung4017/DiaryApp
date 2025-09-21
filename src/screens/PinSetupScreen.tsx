@@ -91,7 +91,7 @@ export default function PinSetupScreen() {
           isEnabled: true,
           lockType: 'pin',
           pinCode: hashedPin,
-          biometricEnabled: false,
+          biometricEnabled: false, // 초기 설정 시 생체인증 비활성화
           backupUnlockEnabled: false,
           securityQuestions: [],
           createdAt: Date.now(),
@@ -101,12 +101,8 @@ export default function PinSetupScreen() {
         await DatabaseService.saveSecuritySettings(newSettings);
         Alert.alert('성공', 'PIN이 설정되었습니다.', [
           { text: '확인', onPress: () => {
-            // 보안 설정 화면으로 돌아가서 리로드
+            // 암호설정 화면으로 돌아가기
             navigation.goBack();
-            // 리로드를 위해 약간의 지연 후 포커스 이벤트 발생
-            setTimeout(() => {
-              (navigation as any).navigate('SecuritySettings');
-            }, 100);
           }}
         ]);
       } else {
@@ -131,19 +127,18 @@ export default function PinSetupScreen() {
         const hashedPin = await SecurityService.hashPinCode(secondPin);
         const updatedSettings = {
           ...securitySettings,
+          lockType: 'pin', // 잠금 방식을 PIN으로 명시적 설정
           pinCode: hashedPin,
+          biometricEnabled: false, // 생체인증 비활성화
           updatedAt: Date.now(),
         };
 
+        console.log('PinSetupScreen - 저장할 설정:', updatedSettings);
         await DatabaseService.saveSecuritySettings(updatedSettings);
         Alert.alert('성공', 'PIN이 변경되었습니다.', [
           { text: '확인', onPress: () => {
-            // 보안 설정 화면으로 돌아가서 리로드
+            // 암호설정 화면으로 돌아가기
             navigation.goBack();
-            // 리로드를 위해 약간의 지연 후 포커스 이벤트 발생
-            setTimeout(() => {
-              (navigation as any).navigate('SecuritySettings');
-            }, 100);
           }}
         ]);
       }

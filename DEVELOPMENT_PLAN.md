@@ -160,11 +160,43 @@ src/
 
 ### 4. 암호설정 화면 (SecuritySettingsScreen)
 
+#### UI 구성
+```
+┌─────────────────────────────────────┐
+│ [←] 암호설정                        │ ← 헤더
+├─────────────────────────────────────┤
+│ 앱 잠금                             │
+│ ┌─────────────────────────────────┐ │
+│ │ 앱 잠금                    [ON] │ │
+│ │ 활성화됨                        │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ 잠금 방식                           │
+│ ┌─────────────────────────────────┐ │
+│ │ 잠금 방식                [변경] │ │
+│ │ PIN                            │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ 암호 변경                           │
+│ ┌─────────────────────────────────┐ │
+│ │ 암호 변경                [변경] │ │
+│ │ 새로운 암호 설정                │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ 비밀번호 분실 시 대안               │
+│ ┌─────────────────────────────────┐ │
+│ │ 비밀번호 분실 시 대안      [설정]│ │
+│ │ 보안 질문으로 잠금 해제         │ │
+│ └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
+```
+
 #### 주요 기능
 - **앱 잠금 ON/OFF**: 전체 앱 잠금 기능 활성화/비활성화
-- **잠금 방식 선택**: PIN(4-6자리), 패턴(3x3 그리드), 생체인증
+- **잠금 방식 선택**: 모달 팝업으로 PIN(4-8자리), 패턴(3x3 그리드), 생체인증 선택
 - **암호 변경**: 기존 암호 변경 및 생체인증 재등록
 - **보안 정보**: 각 잠금 방식별 설명 및 사용법 안내
+- **비밀번호 분실 대안**: 보안 질문 설정 (구현 예정)
 
 ### 5. 테마설정 화면 (ThemeSettingsScreen)
 
@@ -237,6 +269,28 @@ CREATE TABLE backup_history (
   file_size INTEGER,
   file_path TEXT
 );
+
+-- 보안 설정 테이블
+CREATE TABLE security_settings (
+  id TEXT PRIMARY KEY,
+  is_enabled INTEGER DEFAULT 0,
+  lock_type TEXT DEFAULT 'pin',
+  pin_code TEXT,
+  pattern TEXT,
+  biometric_enabled INTEGER DEFAULT 0,
+  backup_unlock_enabled INTEGER DEFAULT 0,
+  security_questions TEXT,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+
+-- 보안 질문 테이블
+CREATE TABLE security_questions (
+  id TEXT PRIMARY KEY,
+  question TEXT,
+  answer TEXT,
+  created_at INTEGER
+);
 ```
 
 ### 데이터 타입 정의
@@ -278,11 +332,34 @@ interface Settings {
   currentDiaryBookId: string; // 현재 선택된 일기장 ID
   theme: 'light' | 'dark' | 'custom';
   language: 'ko' | 'en' | 'ja' | 'zh';
-  isLockEnabled: boolean;
-  lockType: 'pin' | 'pattern' | 'biometric';
   isGoogleDriveEnabled: boolean;
   autoBackup: boolean;
   maxImageSize: number; // MB
+}
+
+// 보안 설정 타입 정의
+interface SecuritySettings {
+  id: string;
+  isEnabled: boolean;
+  lockType: 'pin' | 'pattern' | 'biometric';
+  pinCode: string;
+  pattern: string;
+  biometricEnabled: boolean;
+  backupUnlockEnabled: boolean;
+  securityQuestions: SecurityQuestion[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface SecurityQuestion {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+interface PatternData {
+  dots: number[];
+  createdAt: number;
 }
 ```
 
@@ -355,23 +432,28 @@ const searchQuery = `
 
 #### 암호화 구현
 ```typescript
-// AES 암호화
-import CryptoJS from 'crypto-js';
+// PIN 해싱 (expo-crypto 사용)
+import * as Crypto from 'expo-crypto';
 
-const encryptText = (text: string, password: string): string => {
-  return CryptoJS.AES.encrypt(text, password).toString();
+const hashPinCode = async (pin: string): Promise<string> => {
+  return await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    pin,
+    { encoding: Crypto.CryptoEncoding.BASE64 }
+  );
 };
 
-const decryptText = (encryptedText: string, password: string): string => {
-  const bytes = CryptoJS.AES.decrypt(encryptedText, password);
-  return bytes.toString(CryptoJS.enc.Utf8);
+const verifyPinCode = async (pin: string, hashedPin: string): Promise<boolean> => {
+  const hashedInput = await hashPinCode(pin);
+  return hashedInput === hashedPin;
 };
 ```
 
 #### 인증 시스템
-- **PIN**: 4-6자리 숫자
-- **패턴**: 3x3 그리드 패턴
-- **생체인증**: 지문/얼굴 인식
+- **PIN**: 4-8자리 숫자 (해싱하여 저장)
+- **패턴**: 3x3 그리드 패턴 (JSON으로 저장)
+- **생체인증**: 지문/얼굴 인식 (expo-local-authentication 사용)
+- **앱 잠금**: 앱 시작 시 및 백그라운드 복귀 시 인증 필요
 
 ### 4. 백업/복원 시스템
 
@@ -438,5 +520,65 @@ interface BackupData {
 
 ---
 
+---
+
+## 🚀 구현 완료된 기능
+
+### ✅ 완료된 핵심 기능
+1. **다중 일기장 시스템**: 일기장별 독립적인 일기 관리
+2. **앱 잠금 시스템**: PIN, 패턴, 생체인증 지원
+3. **이미지 처리**: 카메라/갤러리에서 사진 업로드 및 썸네일 표시
+4. **일기 CRUD**: 작성, 편집, 삭제, 상세보기
+5. **날짜 필터링**: 기간별 일기 조회 및 사용자 지정 날짜 선택
+6. **검색 기능**: 제목과 본문 전체 텍스트 검색
+7. **기분 시스템**: 6가지 기분 이모지 및 차트 표시
+8. **태그 시스템**: 해시태그 형태의 태그 관리
+9. **설정 메뉴**: 슬라이드 형태의 설정 메뉴
+10. **데이터베이스 마이그레이션**: 스키마 변경 시 자동 마이그레이션
+
+### ✅ 완료된 보안 기능
+1. **PIN 잠금**: 4-8자리 숫자 입력 및 해싱 저장
+2. **패턴 잠금**: 3x3 그리드에서 패턴 그리기
+3. **생체인증**: 지문/얼굴 인식 (기기 지원 시)
+4. **앱 시작 잠금**: 앱 시작 시 인증 화면 표시
+5. **백그라운드 잠금**: 앱 백그라운드 복귀 시 재인증
+6. **잠금 방식 선택**: 모달 팝업으로 잠금 방식 변경
+
+### ✅ 완료된 UI/UX 기능
+1. **반응형 레이아웃**: 다양한 화면 크기 지원
+2. **SafeAreaView**: 상태바 및 네비게이션바 겹침 방지
+3. **햅틱 피드백**: 터치 시 진동 피드백
+4. **이미지 뷰어**: 확대/축소, 스와이프 네비게이션
+5. **날짜 표시**: 최근 30일은 "21일 (일)", 60일 이후는 "8월21일 (일)"
+6. **주말 색상**: 토요일 파란색, 일요일 빨간색
+7. **Pull-to-refresh**: 아래로 당겨서 새로고침
+8. **잠금 방식 변경 최적화**: 생체인증 설정 초기화, 네비게이션 개선
+9. **지문/얼굴 인증**: 더 정확한 생체인증 문구 표시
+
+---
+
+## 🔧 최근 구현된 주요 기능
+
+### 앱 잠금 시스템 완전 구현
+- **PIN 잠금**: 4-8자리 숫자, 해싱 저장
+- **패턴 잠금**: 3x3 그리드, 최소 4개 점 연결
+- **생체인증**: 지문/얼굴 인식 (기기 지원 시)
+- **잠금 방식 변경**: PIN ↔ 패턴 ↔ 생체인증 자유 전환
+- **설정 초기화**: 잠금 방식 변경 시 이전 설정 자동 초기화
+
+### 데이터베이스 안정성 개선
+- **WAL 모드**: 동시 접근 지원
+- **재시도 로직**: 데이터베이스 잠금 오류 자동 처리
+- **마이그레이션**: v0 → v1 → v2 → v3 자동 업그레이드
+- **샘플 데이터**: 앱 초기 실행 시 테스트 데이터 자동 생성
+
+### UI/UX 최적화
+- **SafeAreaView**: Android 상태바/네비게이션바 겹침 방지
+- **이미지 뷰어**: 확대/축소, 스와이프, 원형 네비게이션
+- **네비게이션**: 설정 변경 후 암호설정 화면으로 자연스러운 이동
+- **햅틱 피드백**: 터치 시 진동으로 사용자 경험 향상
+
+---
+
 *이 계획서는 개발 진행에 따라 지속적으로 업데이트됩니다.*
-*마지막 업데이트: 2025년 9월 21일*
+*마지막 업데이트: 2025년 1월 21일 (최신)*

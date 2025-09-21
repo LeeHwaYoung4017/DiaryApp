@@ -4,31 +4,91 @@ import { DB_CONFIG } from '../../constants';
 
 class DatabaseService {
   private db: SQLite.SQLiteDatabase | null = null;
+  private isLocked = false;
+  private jsonParseErrorLogged = false;
 
   async init(): Promise<void> {
     try {
+      // 기존 데이터베이스 연결 정리
       if (this.db) {
-        await this.db.closeAsync();
+        try {
+          await this.db.closeAsync();
+        } catch (closeError) {
+          console.log('데이터베이스 닫기 실패 (무시):', closeError);
+        }
+        this.db = null;
       }
+
+      // 새로운 데이터베이스 생성
       this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
+      
+      // WAL 모드 활성화로 동시 접근 개선
+      await this.db.execAsync('PRAGMA journal_mode=WAL;');
+      await this.db.execAsync('PRAGMA synchronous=NORMAL;');
+      await this.db.execAsync('PRAGMA cache_size=10000;');
+      await this.db.execAsync('PRAGMA temp_store=MEMORY;');
+      await this.db.execAsync('PRAGMA busy_timeout=30000;'); // 30초 대기
+      
       await this.migrateDatabase();
+      console.log('데이터베이스 초기화 완료');
     } catch (error) {
       console.error('데이터베이스 초기화 실패:', error);
-      // 데이터베이스가 잠겨있는 경우 잠시 대기 후 재시도
-      if (error instanceof Error && error.message.includes('database is locked')) {
-        console.log('데이터베이스가 잠겨있습니다. 1초 후 재시도합니다...');
+      // 초기화 실패 시 데이터베이스 재생성 시도
+      try {
+        console.log('데이터베이스 재생성 시도...');
+        await SQLite.deleteDatabaseAsync(DB_CONFIG.name);
         await new Promise(resolve => setTimeout(resolve, 1000));
-        try {
-          this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
-          await this.migrateDatabase();
-        } catch (retryError) {
-          console.error('데이터베이스 재시도 실패:', retryError);
-          throw retryError;
-        }
-      } else {
-        throw error;
+        this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
+        await this.db.execAsync('PRAGMA journal_mode=WAL;');
+        await this.db.execAsync('PRAGMA synchronous=NORMAL;');
+        await this.db.execAsync('PRAGMA busy_timeout=30000;');
+        await this.migrateDatabase();
+        console.log('데이터베이스 재생성 완료');
+      } catch (retryError) {
+        console.error('데이터베이스 재생성 실패:', retryError);
+        throw retryError;
       }
     }
+  }
+
+  private async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    delay: number = 500
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // 데이터베이스 연결 확인
+        if (!this.db) {
+          await this.init();
+        }
+        return await operation();
+      } catch (error) {
+        if (error instanceof Error && (
+          error.message.includes('database is locked') ||
+          error.message.includes('database is closed') ||
+          error.message.includes('finalizeAsync') ||
+          error.message.includes('NullPointerException')
+        )) {
+          if (attempt === maxRetries) {
+            console.error(`데이터베이스 작업 실패 (${maxRetries}회 재시도 후):`, error);
+            // 마지막 시도에서도 실패하면 데이터베이스 재초기화
+            try {
+              await this.init();
+              return await operation();
+            } catch (finalError) {
+              throw finalError;
+            }
+          }
+          console.log(`데이터베이스 오류 감지. ${delay}ms 후 재시도 (${attempt}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 1.5; // 지수 백오프
+        } else {
+          throw error;
+        }
+      }
+    }
+    throw new Error('최대 재시도 횟수 초과');
   }
 
   private async migrateDatabase(): Promise<void> {
@@ -343,9 +403,11 @@ class DatabaseService {
   async getDiaryBooks(): Promise<DiaryBook[]> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const results = await this.db.getAllAsync(
-      'SELECT * FROM diary_books ORDER BY created_at ASC'
-    ) as any[];
+    const results = await this.executeWithRetry(async () => {
+      return await this.db!.getAllAsync(
+        'SELECT * FROM diary_books ORDER BY created_at ASC'
+      ) as any[];
+    });
 
     return results.map(row => ({
       id: row.id,
@@ -363,9 +425,11 @@ class DatabaseService {
     if (currentId) return currentId;
 
     // 기본 일기장 ID 반환
-    const defaultBook = await this.db.getFirstAsync(
-      'SELECT id FROM diary_books WHERE is_default = 1'
-    ) as any;
+    const defaultBook = await this.executeWithRetry(async () => {
+      return await this.db!.getFirstAsync(
+        'SELECT id FROM diary_books WHERE is_default = 1'
+      ) as any;
+    });
 
     return defaultBook?.id || '';
   }
@@ -417,10 +481,12 @@ class DatabaseService {
   async getDiary(id: string): Promise<Diary | null> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const result = await this.db.getFirstAsync(
-      'SELECT * FROM diaries WHERE id = ?',
-      id
-    ) as any;
+    const result = await this.executeWithRetry(async () => {
+      return await this.db!.getFirstAsync(
+        'SELECT * FROM diaries WHERE id = ?',
+        id
+      ) as any;
+    });
 
     if (!result) return null;
 
@@ -432,13 +498,15 @@ class DatabaseService {
 
     const currentDiaryBookId = diaryBookId || await this.getCurrentDiaryBookId();
     
-    const results = await this.db.getAllAsync(
-      `SELECT * FROM diaries 
-       WHERE diary_book_id = ?
-       ORDER BY created_at DESC 
-       LIMIT ? OFFSET ?`,
-      currentDiaryBookId, limit, offset
-    ) as any[];
+    const results = await this.executeWithRetry(async () => {
+      return await this.db!.getAllAsync(
+        `SELECT * FROM diaries 
+         WHERE diary_book_id = ?
+         ORDER BY created_at DESC 
+         LIMIT ? OFFSET ?`,
+        currentDiaryBookId, limit, offset
+      ) as any[];
+    });
 
     return results.map(row => this.mapRowToDiary(row));
   }
@@ -517,10 +585,12 @@ class DatabaseService {
   async getSetting(key: string): Promise<string | null> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const result = await this.db.getFirstAsync(
-      'SELECT value FROM settings WHERE key = ?',
-      key
-    ) as any;
+    const result = await this.executeWithRetry(async () => {
+      return await this.db!.getFirstAsync(
+        'SELECT value FROM settings WHERE key = ?',
+        key
+      ) as any;
+    });
 
     return result?.value || null;
   }
@@ -528,82 +598,314 @@ class DatabaseService {
   async setSetting(key: string, value: string): Promise<void> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    await this.db.runAsync(
-      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-      [key, value]
-    );
+    await this.executeWithRetry(async () => {
+      await this.db!.runAsync(
+        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+        [key, value]
+      );
+    });
   }
 
   // 보안 설정 관련 메서드들
   async getSecuritySettings(): Promise<SecuritySettings | null> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const result = await this.db.getFirstAsync(
-      'SELECT * FROM security_settings ORDER BY id DESC LIMIT 1'
-    ) as any;
+    return this.executeWithRetry(async () => {
+      const result = await this.db!.getFirstAsync(
+        'SELECT * FROM security_settings ORDER BY id DESC LIMIT 1'
+      ) as any;
 
-    if (!result) return null;
+      if (!result) return null;
 
-    return {
-      isEnabled: Boolean(result.is_enabled),
-      lockType: result.lock_type || 'pin',
-      pinCode: result.pin_code,
-      pattern: result.pattern,
-      biometricEnabled: Boolean(result.biometric_enabled),
-      backupUnlockEnabled: Boolean(result.backup_unlock_enabled),
-      securityQuestions: result.security_questions ? JSON.parse(result.security_questions) : [],
-      createdAt: result.created_at,
-      updatedAt: result.updated_at,
-    };
+      return {
+        isEnabled: Boolean(result.is_enabled),
+        lockType: result.lock_type || 'pin',
+        pinCode: result.pin_code,
+        pattern: result.pattern,
+        biometricEnabled: Boolean(result.biometric_enabled),
+        backupUnlockEnabled: Boolean(result.backup_unlock_enabled),
+        securityQuestions: result.security_questions ? JSON.parse(result.security_questions) : [],
+        createdAt: result.created_at,
+        updatedAt: result.updated_at,
+      };
+    });
   }
 
   async saveSecuritySettings(settings: SecuritySettings): Promise<void> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const now = Date.now();
-    await this.db.runAsync(`
-      INSERT OR REPLACE INTO security_settings 
-      (is_enabled, lock_type, pin_code, pattern, biometric_enabled, backup_unlock_enabled, security_questions, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      settings.isEnabled ? 1 : 0,
-      settings.lockType,
-      settings.pinCode || null,
-      settings.pattern || null,
-      settings.biometricEnabled ? 1 : 0,
-      settings.backupUnlockEnabled ? 1 : 0,
-      settings.securityQuestions ? JSON.stringify(settings.securityQuestions) : null,
-      settings.createdAt || now,
-      now,
-    ]);
+    return this.executeWithRetry(async () => {
+      const now = Date.now();
+      await this.db!.runAsync(`
+        INSERT OR REPLACE INTO security_settings 
+        (is_enabled, lock_type, pin_code, pattern, biometric_enabled, backup_unlock_enabled, security_questions, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        settings.isEnabled ? 1 : 0,
+        settings.lockType,
+        settings.pinCode || null,
+        settings.pattern || null,
+        settings.biometricEnabled ? 1 : 0,
+        settings.backupUnlockEnabled ? 1 : 0,
+        settings.securityQuestions ? JSON.stringify(settings.securityQuestions) : null,
+        settings.createdAt || now,
+        now,
+      ]);
+    });
   }
 
   async updateSecuritySettings(updates: Partial<SecuritySettings>): Promise<void> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    const existing = await this.getSecuritySettings();
-    if (!existing) {
-      throw new Error('보안 설정이 존재하지 않습니다.');
-    }
+    return this.executeWithRetry(async () => {
+      const existing = await this.getSecuritySettings();
+      if (!existing) {
+        throw new Error('보안 설정이 존재하지 않습니다.');
+      }
 
-    const updatedSettings: SecuritySettings = {
-      ...existing,
-      ...updates,
-      updatedAt: Date.now(),
-    };
+      const updatedSettings: SecuritySettings = {
+        ...existing,
+        ...updates,
+        updatedAt: Date.now(),
+      };
 
-    await this.saveSecuritySettings(updatedSettings);
+      await this.saveSecuritySettings(updatedSettings);
+    });
   }
 
   async deleteSecuritySettings(): Promise<void> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
-    await this.db.runAsync('DELETE FROM security_settings');
-    await this.db.runAsync('DELETE FROM security_questions');
+    return this.executeWithRetry(async () => {
+      await this.db!.runAsync('DELETE FROM security_settings');
+      await this.db!.runAsync('DELETE FROM security_questions');
+    });
+  }
+
+  // 가데이터 생성 메서드
+  async generateSampleData(): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    try {
+      // 기본 일기장 생성
+      const defaultDiaryBook = {
+        id: 'default-diary-book',
+        name: '나의 일기장',
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        is_default: 1
+      };
+
+      await this.db.runAsync(`
+        INSERT OR REPLACE INTO diary_books (id, name, created_at, updated_at, is_default)
+        VALUES (?, ?, ?, ?, ?)
+      `, [defaultDiaryBook.id, defaultDiaryBook.name, defaultDiaryBook.created_at, defaultDiaryBook.updated_at, defaultDiaryBook.is_default]);
+
+      // 2025년 6월~9월 가데이터 생성 (월별 5개씩)
+      const sampleDiaries = [
+        // 6월
+        {
+          date: '2025-06-01',
+          title: '6월의 시작',
+          content: '새로운 달이 시작되었다. 6월은 여름의 시작이자 반년의 중간점이다. 올해 상반기에 이루고 싶었던 목표들을 되돌아보며, 하반기 계획을 세워보았다.',
+          mood: 4,
+          tags: '새로운 시작,목표,계획'
+        },
+        {
+          date: '2025-06-08',
+          title: '따뜻한 햇살',
+          content: '오늘은 정말 좋은 날씨였다. 창문을 열고 들어오는 따뜻한 햇살이 마음을 밝게 해주었다. 점심시간에 공원을 산책하며 자연의 소리를 들었다.',
+          mood: 5,
+          tags: '날씨,산책,자연'
+        },
+        {
+          date: '2025-06-15',
+          title: '친구와의 만남',
+          content: '오랜만에 대학교 동기 친구를 만났다. 각자 다른 길을 걷고 있지만, 만나면 여전히 예전과 같은 편안함이 있다.',
+          mood: 5,
+          tags: '친구,만남,우정'
+        },
+        {
+          date: '2025-06-22',
+          title: '새로운 도전',
+          content: '오늘부터 새로운 프로젝트를 시작했다. 처음에는 막막했지만, 차근차근 계획을 세우며 진행해보니 생각보다 할 만하다.',
+          mood: 4,
+          tags: '새로운 도전,프로젝트,성장'
+        },
+        {
+          date: '2025-06-29',
+          title: '6월의 마무리',
+          content: '6월의 마지막 날이다. 한 달이 이렇게 빨리 지나갔나 싶다. 이번 달에는 새로운 것들을 많이 시도해보고, 좋은 사람들과 만나고, 소중한 시간들을 보냈다.',
+          mood: 5,
+          tags: '6월 마무리,회고,7월 계획'
+        },
+        // 7월
+        {
+          date: '2025-07-01',
+          title: '7월의 시작',
+          content: '7월이 시작되었다. 여름이 본격적으로 시작되는 느낌이다. 더위가 시작되지만, 여름만의 특별한 매력도 있다.',
+          mood: 4,
+          tags: '7월,여름,시작'
+        },
+        {
+          date: '2025-07-08',
+          title: '시원한 바다',
+          content: '오늘은 바다에 갔다. 파도 소리와 시원한 바닷바람이 마음을 시원하게 해주었다. 여름 바다의 매력을 다시 한번 느꼈다.',
+          mood: 5,
+          tags: '바다,여름,휴가'
+        },
+        {
+          date: '2025-07-15',
+          title: '아이스크림의 맛',
+          content: '더운 날씨에 아이스크림을 먹었다. 시원한 맛이 입안에서 퍼지면서 더위가 한순간에 사라지는 것 같았다.',
+          mood: 4,
+          tags: '아이스크림,여름,시원함'
+        },
+        {
+          date: '2025-07-22',
+          title: '여름밤의 산책',
+          content: '저녁에 공원을 산책했다. 여름밤의 시원한 바람과 반딧불이들이 만들어내는 아름다운 풍경이 인상적이었다.',
+          mood: 4,
+          tags: '산책,여름밤,자연'
+        },
+        {
+          date: '2025-07-29',
+          title: '7월의 마무리',
+          content: '7월이 끝나간다. 이번 달에는 여름의 매력을 제대로 느낄 수 있었다. 8월에도 좋은 추억을 만들어야겠다.',
+          mood: 4,
+          tags: '7월 마무리,여름,추억'
+        },
+        // 8월
+        {
+          date: '2025-08-01',
+          title: '8월의 시작',
+          content: '8월이 시작되었다. 여름의 절정기다. 더위가 심하지만 여름의 마지막을 제대로 즐겨야겠다.',
+          mood: 4,
+          tags: '8월,여름,절정'
+        },
+        {
+          date: '2025-08-08',
+          title: '여름 축제',
+          content: '오늘은 여름 축제에 갔다. 다양한 음식과 공연을 즐기며 여름의 즐거움을 만끽했다.',
+          mood: 5,
+          tags: '축제,여름,즐거움'
+        },
+        {
+          date: '2025-08-15',
+          title: '광복절',
+          content: '광복절이다. 조상들의 희생을 기리며 자유와 평화의 소중함을 다시 한번 생각해본다.',
+          mood: 3,
+          tags: '광복절,역사,감사'
+        },
+        {
+          date: '2025-08-22',
+          title: '여름의 끝',
+          content: '여름이 끝나가는 느낌이다. 아직 더위는 있지만 가을이 오고 있다는 신호를 느낄 수 있다.',
+          mood: 3,
+          tags: '여름 끝,가을,계절'
+        },
+        {
+          date: '2025-08-29',
+          title: '8월의 마무리',
+          content: '8월의 마지막 날이다. 여름의 마지막을 보내며 가을을 준비해야겠다.',
+          mood: 4,
+          tags: '8월 마무리,여름 끝,가을 준비'
+        },
+        // 9월
+        {
+          date: '2025-09-01',
+          title: '9월의 시작',
+          content: '9월이 시작되었다. 가을이 시작되는 달이다. 선선한 바람과 함께 새로운 시작을 맞이한다.',
+          mood: 4,
+          tags: '9월,가을,시작'
+        },
+        {
+          date: '2025-09-08',
+          title: '가을의 첫걸음',
+          content: '가을의 첫걸음을 내딛었다. 선선한 바람과 노란 단풍이 가을의 시작을 알려준다.',
+          mood: 4,
+          tags: '가을,단풍,바람'
+        },
+        {
+          date: '2025-09-15',
+          title: '추석 연휴',
+          content: '추석 연휴다. 가족들과 함께 보내는 시간이 정말 소중하다. 맛있는 음식과 함께하는 대화가 좋다.',
+          mood: 5,
+          tags: '추석,가족,연휴'
+        },
+        {
+          date: '2025-09-18',
+          title: '가을의 매력',
+          content: '가을의 매력을 제대로 느꼈다. 선선한 날씨와 아름다운 단풍이 마음을 평화롭게 해준다.',
+          mood: 5,
+          tags: '가을,단풍,평화'
+        },
+        {
+          date: '2025-09-21',
+          title: '9월의 중반',
+          content: '9월의 중반이다. 가을이 본격적으로 시작되어 자연의 변화를 느낄 수 있다. 새로운 계절의 시작이 기대된다.',
+          mood: 4,
+          tags: '9월 중반,가을,자연'
+        }
+      ];
+
+      for (const diary of sampleDiaries) {
+        const date = new Date(diary.date);
+        const timestamp = date.getTime();
+        
+        await this.db.runAsync(`
+          INSERT OR REPLACE INTO diaries 
+          (id, diary_book_id, title, content, mood, created_at, updated_at, pinned, is_encrypted, tags, images, metadata)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          `diary-${diary.date}`,
+          defaultDiaryBook.id,
+          diary.title,
+          diary.content,
+          diary.mood,
+          timestamp,
+          timestamp,
+          0,
+          0,
+          JSON.stringify(diary.tags.split(',')), // tags를 JSON 배열로 변환
+          JSON.stringify([]), // images를 빈 배열로 저장
+          JSON.stringify({}) // metadata를 빈 객체로 저장
+        ]);
+      }
+
+      console.log('가데이터 생성 완료');
+    } catch (error) {
+      console.error('가데이터 생성 실패:', error);
+      throw error;
+    }
   }
 
   // 유틸리티 메서드
-  private mapRowToDiary(row: any): Diary {
+private mapRowToDiary(row: any): Diary {
+    // JSON 파싱 오류 방지를 위한 안전한 파싱 함수
+    const safeJsonParse = (jsonString: string, defaultValue: any) => {
+      try {
+        // 빈 문자열이나 null인 경우 기본값 반환
+        if (!jsonString || jsonString.trim() === '') {
+          return defaultValue;
+        }
+        
+        // JSON 형식이 아닌 문자열인 경우 (한글이 포함된 경우) 기본값 반환
+        if (!jsonString.startsWith('[') && !jsonString.startsWith('{')) {
+          return defaultValue;
+        }
+        
+        return JSON.parse(jsonString);
+      } catch (error) {
+        // 로그를 한 번만 출력하도록 수정
+        if (!this.jsonParseErrorLogged) {
+          console.log('JSON 파싱 오류 감지, 기본값 사용:', jsonString.substring(0, 50) + '...');
+          this.jsonParseErrorLogged = true;
+        }
+        return defaultValue;
+      }
+    };
+
     return {
       id: row.id || '',
       diary_book_id: row.diary_book_id || '',
@@ -614,9 +916,9 @@ class DatabaseService {
       updated_at: row.updated_at || Date.now(),
       pinned: Boolean(row.pinned),
       is_encrypted: Boolean(row.is_encrypted),
-      tags: JSON.parse(row.tags || '[]'),
-      images: JSON.parse(row.images || '[]'),
-      metadata: JSON.parse(row.metadata || '{}'),
+      tags: safeJsonParse(row.tags || '[]', []),
+      images: safeJsonParse(row.images || '[]', []),
+      metadata: safeJsonParse(row.metadata || '{}', {}),
     };
   }
 

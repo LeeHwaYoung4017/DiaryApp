@@ -154,7 +154,7 @@ export default function FeedScreen({ navigation }: any) {
     if (currentDiaryBook) {
       loadDiaries();
     }
-  }, [currentDiaryBook]);
+  }, [currentDiaryBook, selectedDateFilter, customStartDate, customEndDate]);
 
   // 화면이 포커스될 때마다 일기 목록 새로고침
   useFocusEffect(
@@ -184,14 +184,56 @@ export default function FeedScreen({ navigation }: any) {
     
     try {
       setLoading(true);
-      const data = await DatabaseService.getDiaries(30, 0, currentDiaryBook.id);
-      setDiaries(data);
+      // 충분한 수의 일기를 가져온 후 클라이언트에서 날짜 필터링
+      const allData = await DatabaseService.getDiaries(1000, 0, currentDiaryBook.id);
+      
+      // 날짜 필터링 적용
+      const filteredData = filterDiariesByDate(allData, selectedDateFilter, customStartDate, customEndDate);
+      setDiaries(filteredData);
     } catch (error) {
       console.error('일기 로드 실패:', error);
       Alert.alert('오류', '일기를 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // 날짜 필터링 함수
+  const filterDiariesByDate = (diaries: Diary[], filter: string, startDate?: Date | null, endDate?: Date | null) => {
+    const now = new Date();
+    const cutoffDate = new Date();
+
+    switch (filter) {
+      case '7days':
+        cutoffDate.setDate(now.getDate() - 7);
+        break;
+      case '15days':
+        cutoffDate.setDate(now.getDate() - 15);
+        break;
+      case '30days':
+        cutoffDate.setDate(now.getDate() - 30);
+        break;
+      case '60days':
+        cutoffDate.setDate(now.getDate() - 60);
+        break;
+      case '90days':
+        cutoffDate.setDate(now.getDate() - 90);
+        break;
+      case 'custom':
+        if (startDate && endDate) {
+          return diaries.filter(diary => {
+            const diaryDate = new Date(diary.created_at);
+            return diaryDate >= startDate && diaryDate <= endDate;
+          });
+        }
+        return diaries;
+      default:
+        return diaries;
+    }
+
+    return diaries.filter(diary => 
+      new Date(diary.created_at) >= cutoffDate
+    );
   };
 
   const createNewDiaryBook = async () => {
