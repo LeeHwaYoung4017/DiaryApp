@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,14 @@ import {
   TextInput,
   Image,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Diary, DiaryBook } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, DATE_FILTER_CONFIG } from '../constants';
+import { MOOD_EMOJIS } from '../types';
 
 export default function FeedScreen({ navigation }: any) {
   const [diaries, setDiaries] = useState<Diary[]>([]);
@@ -35,9 +37,84 @@ export default function FeedScreen({ navigation }: any) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [lastTap, setLastTap] = useState(0);
+  
+  // useRef로 최신 상태 값 참조
+  const currentImageIndexRef = useRef(currentImageIndex);
+  const selectedImagesRef = useRef(selectedImages);
+  const isZoomedRef = useRef(isZoomed);
+  
+  // ref 값들을 최신 상태로 업데이트
+  useEffect(() => {
+    currentImageIndexRef.current = currentImageIndex;
+  }, [currentImageIndex]);
+  
+  useEffect(() => {
+    selectedImagesRef.current = selectedImages;
+  }, [selectedImages]);
+  
+  useEffect(() => {
+    isZoomedRef.current = isZoomed;
+  }, [isZoomed]);
+
+  // PanResponder for swipe gestures and double tap
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: (evt, gestureState) => {
+      return true;
+    },
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // 확대된 상태에서는 스와이프를 무시
+      if (isZoomedRef.current) return false;
+      return Math.abs(gestureState.dx) > 5;
+    },
+    onPanResponderGrant: (evt, gestureState) => {
+      // 더블탭 감지
+      const now = Date.now();
+      console.log('PanResponder Grant, time diff:', now - lastTap);
+      if (now - lastTap < 300) {
+        // 더블탭 감지됨
+        console.log('Double tap detected!');
+        handleImageDoublePress();
+      }
+      setLastTap(now);
+    },
+    onPanResponderMove: (evt, gestureState) => {
+      // Do nothing during move
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      // 확대된 상태에서는 스와이프를 무시
+      if (isZoomedRef.current) return;
+      
+      console.log('Swipe detected:', gestureState.dx);
+      
+      if (Math.abs(gestureState.dx) > 20) {
+        if (gestureState.dx > 0) {
+          // Swipe right - previous image
+          console.log('Swipe right - previous image');
+          handlePrevImage();
+        } else {
+          // Swipe left - next image
+          console.log('Swipe left - next image');
+          handleNextImage();
+        }
+      }
+    },
+  });
 
   // 날짜 포맷팅 함수
   const formatDiaryDate = (date: Date) => {
+    if (!date || isNaN(date.getTime())) {
+      return {
+        day: '날짜 오류',
+        dayOfWeek: '?',
+        isWeekend: false,
+        isSunday: false,
+        isSaturday: false
+      };
+    }
+    
     const now = new Date();
     const diffTime = now.getTime() - date.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -187,10 +264,49 @@ export default function FeedScreen({ navigation }: any) {
     }
   };
 
+
   const handleImagePress = (images: string[], index: number) => {
     setSelectedImages(images);
     setCurrentImageIndex(index);
+    setImageScale(1);
+    setIsZoomed(false);
     setShowImageModal(true);
+  };
+
+  const handleImageDoublePress = useCallback(() => {
+    // 더블탭으로 확대/축소 토글
+    console.log('handleImageDoublePress called, isZoomed:', isZoomed);
+    if (isZoomed) {
+      setImageScale(1);
+      setIsZoomed(false);
+      console.log('Zooming out to scale 1');
+    } else {
+      setImageScale(2);
+      setIsZoomed(true);
+      console.log('Zooming in to scale 2');
+    }
+  }, [isZoomed]);
+
+  const handleNextImage = () => {
+    const currentIndex = currentImageIndexRef.current;
+    const images = selectedImagesRef.current;
+    console.log('handleNextImage called, selectedImages.length:', images.length, 'currentIndex:', currentIndex);
+    if (images.length > 1) {
+      const nextIndex = currentIndex < images.length - 1 ? currentIndex + 1 : 0;
+      console.log('Setting next index to:', nextIndex);
+      setCurrentImageIndex(nextIndex);
+    }
+  };
+
+  const handlePrevImage = () => {
+    const currentIndex = currentImageIndexRef.current;
+    const images = selectedImagesRef.current;
+    console.log('handlePrevImage called, selectedImages.length:', images.length, 'currentIndex:', currentIndex);
+    if (images.length > 1) {
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : images.length - 1;
+      console.log('Setting prev index to:', prevIndex);
+      setCurrentImageIndex(prevIndex);
+    }
   };
 
   const onRefresh = async () => {
@@ -200,7 +316,15 @@ export default function FeedScreen({ navigation }: any) {
   };
 
   const formatDate = (timestamp: number) => {
+    if (!timestamp || isNaN(timestamp)) {
+      return '날짜 오류';
+    }
+    
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      return '날짜 오류';
+    }
+    
     const now = new Date();
     const diffTime = now.getTime() - date.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -213,7 +337,15 @@ export default function FeedScreen({ navigation }: any) {
   };
 
   const formatFullDate = (timestamp: number) => {
+    if (!timestamp || isNaN(timestamp)) {
+      return '날짜 오류';
+    }
+    
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      return '날짜 오류';
+    }
+    
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
     const day = date.getDate();
@@ -259,22 +391,22 @@ export default function FeedScreen({ navigation }: any) {
             </View>
             
             <Text style={styles.titleText} numberOfLines={1}>
-              {item.title || item.content.substring(0, 30) + '...'}
+              {item.title || (item.content ? item.content.substring(0, 30) + '...' : '제목 없음')}
             </Text>
           </View>
           
           <View style={styles.moodSection}>
-            <Text style={styles.moodEmoji}>{MOOD_CONFIG.emojis[item.mood]}</Text>
+            <Text style={styles.moodEmoji}>{MOOD_EMOJIS[item.mood] || '😐'}</Text>
           </View>
           
           <View style={styles.imageSection}>
-            {item.images.length > 0 ? (
+            {item.images && item.images.length > 0 ? (
               <TouchableOpacity
                 onPress={() => handleImagePress(item.images, 0)}
                 style={styles.imagePreviewContainer}
               >
                 <Image 
-                  source={{ uri: item.images[0] }} 
+                  source={{ uri: item.images[0] || '' }} 
                   style={styles.imagePreview}
                   resizeMode="cover"
                 />
@@ -629,25 +761,25 @@ export default function FeedScreen({ navigation }: any) {
             </TouchableOpacity>
             
             <View style={styles.imageModalContent}>
-              <Image
-                source={{ uri: selectedImages[currentImageIndex] }}
-                style={styles.imageModalImage}
-                resizeMode="contain"
-              />
+              <View
+                {...panResponder.panHandlers}
+                style={styles.imageTouchable}
+              >
+                <Image
+                  source={{ uri: selectedImages[currentImageIndex] }}
+                  style={[
+                    styles.imageModalImage,
+                    { transform: [{ scale: imageScale }] }
+                  ]}
+                  resizeMode="contain"
+                />
+              </View>
               
               {selectedImages.length > 1 && (
                 <View style={styles.imageModalNavigation}>
                   <TouchableOpacity
-                    style={[
-                      styles.imageModalNavButton,
-                      currentImageIndex === 0 && styles.imageModalNavButtonDisabled
-                    ]}
-                    onPress={() => {
-                      if (currentImageIndex > 0) {
-                        setCurrentImageIndex(currentImageIndex - 1);
-                      }
-                    }}
-                    disabled={currentImageIndex === 0}
+                    style={styles.imageModalNavButton}
+                    onPress={handlePrevImage}
                   >
                     <Text style={styles.imageModalNavText}>‹</Text>
                   </TouchableOpacity>
@@ -657,16 +789,8 @@ export default function FeedScreen({ navigation }: any) {
                   </Text>
                   
                   <TouchableOpacity
-                    style={[
-                      styles.imageModalNavButton,
-                      currentImageIndex === selectedImages.length - 1 && styles.imageModalNavButtonDisabled
-                    ]}
-                    onPress={() => {
-                      if (currentImageIndex < selectedImages.length - 1) {
-                        setCurrentImageIndex(currentImageIndex + 1);
-                      }
-                    }}
-                    disabled={currentImageIndex === selectedImages.length - 1}
+                    style={styles.imageModalNavButton}
+                    onPress={handleNextImage}
                   >
                     <Text style={styles.imageModalNavText}>›</Text>
                   </TouchableOpacity>
@@ -676,6 +800,7 @@ export default function FeedScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -1161,9 +1286,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   imageModalImage: {
-    width: Dimensions.get('window').width - 40,
-    height: Dimensions.get('window').width - 40,
-    maxHeight: '80%',
+    width: Dimensions.get('window').width * 0.9,
+    height: Dimensions.get('window').height * 0.9,
+  },
+  imageTouchable: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   imageModalNavigation: {
     position: 'absolute',

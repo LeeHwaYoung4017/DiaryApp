@@ -70,7 +70,9 @@ export default function ChartScreen() {
     const moodCounts = [0, 0, 0, 0, 0, 0]; // 0~5 기분별 카운트
     
     diaries.forEach(diary => {
-      moodCounts[diary.mood]++;
+      if (diary.mood !== null && diary.mood !== undefined) {
+        moodCounts[diary.mood]++;
+      }
     });
 
     setMoodData(moodCounts);
@@ -182,7 +184,7 @@ export default function ChartScreen() {
     const total = diaries.length;
     const mostFrequent = getMostFrequentMood();
     const averageMood = total > 0 ? 
-      diaries.reduce((sum, diary) => sum + diary.mood, 0) / total : 0;
+      diaries.reduce((sum, diary) => sum + (diary.mood || 2), 0) / total : 0;
 
     return (
       <View style={styles.statisticsContainer}>

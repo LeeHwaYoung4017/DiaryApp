@@ -11,6 +11,7 @@ import {
 import { Diary } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG } from '../constants';
+import { MOOD_EMOJIS } from '../types';
 
 export default function SearchScreen({ navigation }: any) {
   const [query, setQuery] = useState('');
@@ -82,7 +83,7 @@ export default function SearchScreen({ navigation }: any) {
       <View style={styles.resultContent}>
         <View style={styles.resultHeader}>
           <Text style={styles.resultDate}>{formatDate(item.created_at)}</Text>
-          <Text style={styles.resultMood}>{MOOD_CONFIG.emojis[item.mood]}</Text>
+          <Text style={styles.resultMood}>{MOOD_EMOJIS[item.mood] || '😐'}</Text>
         </View>
         
         <Text style={styles.resultTitle} numberOfLines={1}>

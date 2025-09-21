@@ -48,7 +48,7 @@ class DatabaseService {
       // version 설정 확인
       const versionResult = await this.db.getFirstAsync(
         'SELECT value FROM settings WHERE key = ?',
-        ['database_version']
+        'database_version'
       ) as any;
 
       return versionResult ? parseInt(versionResult.value) : 1;
@@ -329,7 +329,7 @@ class DatabaseService {
 
     const result = await this.db.getFirstAsync(
       'SELECT * FROM diaries WHERE id = ?',
-      [id]
+      id
     ) as any;
 
     if (!result) return null;
@@ -429,7 +429,7 @@ class DatabaseService {
 
     const result = await this.db.getFirstAsync(
       'SELECT value FROM settings WHERE key = ?',
-      [key]
+      key
     ) as any;
 
     return result?.value || null;
@@ -447,13 +447,13 @@ class DatabaseService {
   // 유틸리티 메서드
   private mapRowToDiary(row: any): Diary {
     return {
-      id: row.id,
-      diary_book_id: row.diary_book_id,
-      title: row.title,
-      content: row.content,
-      mood: row.mood,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
+      id: row.id || '',
+      diary_book_id: row.diary_book_id || '',
+      title: row.title || '',
+      content: row.content || '',
+      mood: row.mood !== null && row.mood !== undefined ? row.mood : 2, // 기본값: 보통
+      created_at: row.created_at || Date.now(),
+      updated_at: row.updated_at || Date.now(),
       pinned: Boolean(row.pinned),
       is_encrypted: Boolean(row.is_encrypted),
       tags: JSON.parse(row.tags || '[]'),

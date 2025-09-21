@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Diary, MoodType } from '../types';
+import { Diary, MoodType, MOOD_EMOJIS } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, APP_CONFIG } from '../constants';
 
@@ -154,7 +154,7 @@ export default function EditScreen({ navigation, route }: any) {
         <View style={styles.section}>
           <Text style={styles.label}>기분</Text>
           <View style={styles.moodContainer}>
-            {Object.entries(MOOD_CONFIG.emojis).map(([moodValue, emoji]) => (
+            {Object.entries(MOOD_EMOJIS).map(([moodValue, emoji]) => (
               <TouchableOpacity
                 key={moodValue}
                 style={[

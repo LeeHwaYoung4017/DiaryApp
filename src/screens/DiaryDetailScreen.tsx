@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,15 @@ import {
   Image,
   Dimensions,
   Modal,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Diary } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG } from '../constants';
+import { MOOD_EMOJIS } from '../types';
 
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function DiaryDetailScreen({ navigation, route }: any) {
   const { diaryId } = route.params;
@@ -22,6 +25,69 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [showImageModal, setShowImageModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageScale, setImageScale] = useState(1);
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [lastTap, setLastTap] = useState(0);
+  
+  // useRef로 최신 상태 값 참조
+  const currentImageIndexRef = useRef(currentImageIndex);
+  const diaryRef = useRef(diary);
+  const isZoomedRef = useRef(isZoomed);
+  
+  // ref 값들을 최신 상태로 업데이트
+  useEffect(() => {
+    currentImageIndexRef.current = currentImageIndex;
+  }, [currentImageIndex]);
+  
+  useEffect(() => {
+    diaryRef.current = diary;
+  }, [diary]);
+  
+  useEffect(() => {
+    isZoomedRef.current = isZoomed;
+  }, [isZoomed]);
+
+  // PanResponder for swipe gestures and double tap
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: (evt, gestureState) => {
+      return true;
+    },
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // 확대된 상태에서는 스와이프를 무시
+      if (isZoomedRef.current) return false;
+      return Math.abs(gestureState.dx) > 5;
+    },
+    onPanResponderGrant: (evt, gestureState) => {
+      // 더블탭 감지
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        // 더블탭 감지됨
+        handleImageDoublePress();
+      }
+      setLastTap(now);
+    },
+    onPanResponderMove: (evt, gestureState) => {
+      // Do nothing during move
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      // 확대된 상태에서는 스와이프를 무시
+      if (isZoomedRef.current) return;
+      
+      console.log('Swipe detected:', gestureState.dx);
+      
+      if (Math.abs(gestureState.dx) > 20) {
+        if (gestureState.dx > 0) {
+          // Swipe right - previous image
+          console.log('Swipe right - previous image');
+          handlePrevImage();
+        } else {
+          // Swipe left - next image
+          console.log('Swipe left - next image');
+          handleNextImage();
+        }
+      }
+    },
+  });
 
   useEffect(() => {
     loadDiary();
@@ -29,15 +95,8 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
   const loadDiary = async () => {
     try {
-      setLoading(true);
       const diaryData = await DatabaseService.getDiary(diaryId);
-      if (diaryData) {
-        setDiary(diaryData);
-      } else {
-        Alert.alert('오류', '일기를 찾을 수 없습니다.', [
-          { text: '확인', onPress: () => navigation.goBack() }
-        ]);
-      }
+      setDiary(diaryData);
     } catch (error) {
       console.error('일기 로드 실패:', error);
       Alert.alert('오류', '일기를 불러오는데 실패했습니다.');
@@ -77,29 +136,45 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
   const handleImagePress = (index: number) => {
     setCurrentImageIndex(index);
+    setImageScale(1);
+    setIsZoomed(false);
     setShowImageModal(true);
   };
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const hour = date.getHours();
-    const minute = date.getMinutes();
-    const weekday = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
-    
-    const period = hour < 12 ? '오전' : '오후';
-    const displayHour = hour > 12 ? hour - 12 : hour;
+  const handleImageDoublePress = useCallback(() => {
+    // 더블탭으로 확대/축소 토글
+    if (isZoomed) {
+      setImageScale(1);
+      setIsZoomed(false);
+    } else {
+      setImageScale(2);
+      setIsZoomed(true);
+    }
+  }, [isZoomed]);
 
-    return `${year}년 ${month}월 ${day}일 ${period} ${displayHour}:${minute.toString().padStart(2, '0')} ${weekday}`;
+  const handleNextImage = () => {
+    const currentIndex = currentImageIndexRef.current;
+    const currentDiary = diaryRef.current;
+    if (currentDiary && currentDiary.images.length > 1) {
+      const nextIndex = currentIndex < currentDiary.images.length - 1 ? currentIndex + 1 : 0;
+      setCurrentImageIndex(nextIndex);
+    }
+  };
+
+  const handlePrevImage = () => {
+    const currentIndex = currentImageIndexRef.current;
+    const currentDiary = diaryRef.current;
+    if (currentDiary && currentDiary.images.length > 1) {
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : currentDiary.images.length - 1;
+      setCurrentImageIndex(prevIndex);
+    }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>일기를 불러오는 중...</Text>
+          <Text>로딩 중...</Text>
         </View>
       </SafeAreaView>
     );
@@ -109,53 +184,66 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>일기를 찾을 수 없습니다.</Text>
+          <Text>일기를 찾을 수 없습니다.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* 헤더 */}
-        <View style={styles.header}>
-          <View style={styles.dateContainer}>
-            <Text style={styles.dateText}>{formatDate(diary.created_at)}</Text>
-            <View style={styles.moodContainer}>
-              <Text style={styles.moodEmoji}>{MOOD_CONFIG.emojis[diary.mood]}</Text>
-              <Text style={styles.moodText}>{MOOD_CONFIG.labels[diary.mood]}</Text>
-            </View>
-          </View>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {/* 제목 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>제목</Text>
+          <Text style={styles.title}>{diary.title || '제목 없음'}</Text>
         </View>
 
-        {/* 제목 */}
-        {diary.title && (
-          <View style={styles.titleSection}>
-            <Text style={styles.sectionTitle}>제목</Text>
-            <Text style={styles.titleText}>{diary.title}</Text>
+        {/* 내용 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>내용</Text>
+          <Text style={styles.content}>{diary.content || '내용 없음'}</Text>
+        </View>
+
+        {/* 기분 */}
+        {diary.mood !== null && diary.mood !== undefined && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>기분</Text>
+            <View style={styles.moodContainer}>
+              <Text style={styles.moodEmoji}>{MOOD_EMOJIS[diary.mood] || '😐'}</Text>
+              <Text style={styles.moodText}>{MOOD_CONFIG.labels[diary.mood] || MOOD_CONFIG.labels[2]}</Text>
+            </View>
           </View>
         )}
 
-        {/* 내용 */}
-        <View style={styles.contentSection}>
-          <Text style={styles.sectionTitle}>내용</Text>
-          <Text style={styles.contentText}>{diary.content}</Text>
-        </View>
+        {/* 태그 */}
+        {diary.tags && Array.isArray(diary.tags) && diary.tags.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>태그</Text>
+            <View style={styles.tagsContainer}>
+              {diary.tags.map((tag, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>#{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* 이미지 */}
-        {diary.images.length > 0 && (
-          <View style={styles.imageSection}>
+        {diary.images && Array.isArray(diary.images) && diary.images.length > 0 && (
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>사진</Text>
-            <View style={styles.imageGrid}>
-              {diary.images.map((imageUri, index) => (
+            <View style={styles.imagesContainer}>
+              {diary.images.map((image, index) => (
                 <TouchableOpacity
                   key={index}
                   style={styles.imageContainer}
                   onPress={() => handleImagePress(index)}
                 >
-                  <Image 
-                    source={{ uri: imageUri }} 
+                  <Image
+                    source={{ uri: image || '' }}
                     style={styles.image}
                     resizeMode="cover"
                   />
@@ -165,57 +253,29 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/* 태그 */}
-        {diary.tags.length > 0 && (
-          <View style={styles.tagSection}>
-            <Text style={styles.sectionTitle}>태그</Text>
-            <View style={styles.tagContainer}>
-              {diary.tags.map((tag, index) => (
-                <View key={index} style={styles.tagItem}>
-                  <Text style={styles.tagText}>#{tag}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
         {/* 메타데이터 */}
-        <View style={styles.metadataSection}>
-          <View style={styles.metadataItem}>
-            <Text style={styles.metadataLabel}>작성일:</Text>
-            <Text style={styles.metadataValue}>{formatDate(diary.created_at)}</Text>
-          </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>작성 정보</Text>
+          <Text style={styles.metaText}>
+            작성일: {new Date(diary.created_at).toLocaleDateString('ko-KR')}
+          </Text>
           {diary.updated_at !== diary.created_at && (
-            <View style={styles.metadataItem}>
-              <Text style={styles.metadataLabel}>수정일:</Text>
-              <Text style={styles.metadataValue}>{formatDate(diary.updated_at)}</Text>
-            </View>
-          )}
-          {diary.pinned && (
-            <View style={styles.metadataItem}>
-              <Text style={styles.metadataLabel}>상태:</Text>
-              <Text style={styles.metadataValue}>📌 고정됨</Text>
-            </View>
+            <Text style={styles.metaText}>
+              수정일: {new Date(diary.updated_at).toLocaleDateString('ko-KR')}
+            </Text>
           )}
         </View>
-        
-        {/* 하단 버튼 공간 확보 */}
+
+        {/* 하단 여백 */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* 하단 버튼 */}
+      {/* 하단 버튼들 */}
       <View style={styles.bottomButtons}>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDelete}
-        >
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.deleteButtonText}>삭제</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={handleEdit}
-        >
+        <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
           <Text style={styles.editButtonText}>편집</Text>
         </TouchableOpacity>
       </View>
@@ -241,25 +301,25 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
             </TouchableOpacity>
             
             <View style={styles.imageModalContent}>
-              <Image
-                source={{ uri: diary?.images[currentImageIndex] }}
-                style={styles.imageModalImage}
-                resizeMode="contain"
-              />
+              <View
+                {...panResponder.panHandlers}
+                style={styles.imageTouchable}
+              >
+                <Image
+                  source={{ uri: diary?.images[currentImageIndex] }}
+                  style={[
+                    styles.imageModalImage,
+                    { transform: [{ scale: imageScale }] }
+                  ]}
+                  resizeMode="contain"
+                />
+              </View>
               
               {diary && diary.images.length > 1 && (
                 <View style={styles.imageModalNavigation}>
                   <TouchableOpacity
-                    style={[
-                      styles.imageModalNavButton,
-                      currentImageIndex === 0 && styles.imageModalNavButtonDisabled
-                    ]}
-                    onPress={() => {
-                      if (currentImageIndex > 0) {
-                        setCurrentImageIndex(currentImageIndex - 1);
-                      }
-                    }}
-                    disabled={currentImageIndex === 0}
+                    style={styles.imageModalNavButton}
+                    onPress={handlePrevImage}
                   >
                     <Text style={styles.imageModalNavText}>‹</Text>
                   </TouchableOpacity>
@@ -269,16 +329,8 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
                   </Text>
                   
                   <TouchableOpacity
-                    style={[
-                      styles.imageModalNavButton,
-                      currentImageIndex === diary.images.length - 1 && styles.imageModalNavButtonDisabled
-                    ]}
-                    onPress={() => {
-                      if (currentImageIndex < diary.images.length - 1) {
-                        setCurrentImageIndex(currentImageIndex + 1);
-                      }
-                    }}
-                    disabled={currentImageIndex === diary.images.length - 1}
+                    style={styles.imageModalNavButton}
+                    onPress={handleNextImage}
                   >
                     <Text style={styles.imageModalNavText}>›</Text>
                   </TouchableOpacity>
@@ -295,52 +347,47 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#fff',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: 16,
-    color: '#8E8E93',
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
-  },
   scrollView: {
     flex: 1,
-    padding: 16,
   },
-  header: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+  contentContainer: {
     padding: 20,
-    marginBottom: 16,
   },
-  dateContainer: {
-    alignItems: 'center',
+  section: {
+    marginBottom: 24,
   },
-  dateText: {
-    fontSize: 18,
+  sectionTitle: {
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 12,
+    color: '#333',
+    marginBottom: 8,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    lineHeight: 28,
+  },
+  content: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
   },
   moodContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F8FF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
   },
   moodEmoji: {
     fontSize: 24,
@@ -348,52 +395,32 @@ const styles = StyleSheet.create({
   },
   moodText: {
     fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '500',
+    color: '#333',
   },
-  titleSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-  },
-  titleText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-    lineHeight: 28,
-  },
-  contentSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-  },
-  contentText: {
-    fontSize: 16,
-    color: '#000000',
-    lineHeight: 24,
-  },
-  imageSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 12,
-  },
-  imageGrid: {
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+  },
+  tag: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  tagText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  imagesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   imageContainer: {
-    width: (Dimensions.get('window').width - 80) / 2,
-    height: (Dimensions.get('window').width - 80) / 2,
+    width: (screenWidth - 60) / 2,
+    height: (screenWidth - 60) / 2,
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -401,89 +428,51 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  tagSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-  },
-  tagContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tagItem: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  tagText: {
+  imageCounter: {
     fontSize: 14,
-    color: '#1976D2',
-    fontWeight: '500',
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
   },
-  metadataSection: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 100, // 하단 버튼 공간 확보
-  },
-  metadataItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  metadataLabel: {
+  metaText: {
     fontSize: 14,
-    color: '#8E8E93',
-  },
-  metadataValue: {
-    fontSize: 14,
-    color: '#000000',
-    fontWeight: '500',
+    color: '#666',
+    marginBottom: 4,
   },
   bottomSpacer: {
-    height: 100, // 하단 버튼 공간 확보
+    height: 100,
   },
   bottomButtons: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    borderTopColor: '#e0e0e0',
   },
   deleteButton: {
     flex: 1,
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#ff4444',
+    paddingVertical: 12,
     borderRadius: 8,
-    padding: 16,
     marginRight: 8,
     alignItems: 'center',
   },
   deleteButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
   editButton: {
     flex: 1,
     backgroundColor: '#007AFF',
+    paddingVertical: 12,
     borderRadius: 8,
-    padding: 16,
     marginLeft: 8,
     alignItems: 'center',
   },
   editButtonText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -531,9 +520,14 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   imageModalImage: {
-    width: Dimensions.get('window').width - 40,
-    height: Dimensions.get('window').width - 40,
-    maxHeight: '80%',
+    width: screenWidth * 0.9,
+    height: screenHeight * 0.9,
+  },
+  imageTouchable: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   imageModalNavigation: {
     position: 'absolute',
