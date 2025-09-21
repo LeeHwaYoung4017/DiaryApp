@@ -87,16 +87,12 @@ export default function FeedScreen({ navigation }: any) {
       // 확대된 상태에서는 스와이프를 무시
       if (isZoomedRef.current) return;
       
-      console.log('Swipe detected:', gestureState.dx);
-      
       if (Math.abs(gestureState.dx) > 20) {
         if (gestureState.dx > 0) {
           // Swipe right - previous image
-          console.log('Swipe right - previous image');
           handlePrevImage();
         } else {
           // Swipe left - next image
-          console.log('Swipe left - next image');
           handleNextImage();
         }
       }

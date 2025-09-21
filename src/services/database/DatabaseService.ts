@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { Diary, Settings } from '../../types';
+import { Diary, Settings, SecuritySettings } from '../../types';
 import { DB_CONFIG } from '../../constants';
 
 class DatabaseService {
@@ -7,11 +7,27 @@ class DatabaseService {
 
   async init(): Promise<void> {
     try {
+      if (this.db) {
+        await this.db.closeAsync();
+      }
       this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
       await this.migrateDatabase();
     } catch (error) {
       console.error('데이터베이스 초기화 실패:', error);
-      throw error;
+      // 데이터베이스가 잠겨있는 경우 잠시 대기 후 재시도
+      if (error instanceof Error && error.message.includes('database is locked')) {
+        console.log('데이터베이스가 잠겨있습니다. 1초 후 재시도합니다...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+          this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
+          await this.migrateDatabase();
+        } catch (retryError) {
+          console.error('데이터베이스 재시도 실패:', retryError);
+          throw retryError;
+        }
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -24,11 +40,15 @@ class DatabaseService {
     if (version === 0) {
       // 새 데이터베이스 - 모든 테이블 생성
       await this.createTables();
-      await this.setDatabaseVersion(1);
+      await this.setDatabaseVersion(3);
     } else if (version === 1) {
       // 기존 데이터베이스 - 마이그레이션 수행
       await this.migrateFromV1ToV2();
       await this.setDatabaseVersion(2);
+    } else if (version === 2) {
+      // v2에서 v3로 마이그레이션 (보안 설정 추가)
+      await this.migrateFromV2ToV3();
+      await this.setDatabaseVersion(3);
     }
   }
 
@@ -153,6 +173,50 @@ class DatabaseService {
     console.log('데이터베이스 마이그레이션 완료: v1 → v2');
   }
 
+  private async migrateFromV2ToV3(): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    console.log('데이터베이스 마이그레이션 시작: v2 → v3');
+
+    try {
+      // 보안 설정 테이블 생성
+      await this.db.runAsync(`
+        CREATE TABLE IF NOT EXISTS security_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          is_enabled INTEGER DEFAULT 0,
+          lock_type TEXT DEFAULT 'pin',
+          pin_code TEXT,
+          pattern TEXT,
+          biometric_enabled INTEGER DEFAULT 0,
+          backup_unlock_enabled INTEGER DEFAULT 0,
+          security_questions TEXT,
+          created_at INTEGER,
+          updated_at INTEGER
+        );
+      `);
+
+      // 보안 질문 테이블 생성
+      await this.db.runAsync(`
+        CREATE TABLE IF NOT EXISTS security_questions (
+          id TEXT PRIMARY KEY,
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          created_at INTEGER
+        );
+      `);
+
+      console.log('데이터베이스 마이그레이션 완료: v2 → v3');
+    } catch (error) {
+      console.error('마이그레이션 중 오류 발생:', error);
+      // 테이블이 이미 존재하는 경우 무시
+      if (error instanceof Error && error.message.includes('already exists')) {
+        console.log('테이블이 이미 존재합니다.');
+      } else {
+        throw error;
+      }
+    }
+  }
+
   private async createTables(): Promise<void> {
     if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
 
@@ -201,6 +265,32 @@ class DatabaseService {
         backup_date INTEGER,
         file_size INTEGER,
         file_path TEXT
+      );
+    `);
+
+    // 보안 설정 테이블 생성
+    await this.db.runAsync(`
+      CREATE TABLE IF NOT EXISTS security_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        is_enabled INTEGER DEFAULT 0,
+        lock_type TEXT DEFAULT 'pin',
+        pin_code TEXT,
+        pattern TEXT,
+        biometric_enabled INTEGER DEFAULT 0,
+        backup_unlock_enabled INTEGER DEFAULT 0,
+        security_questions TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      );
+    `);
+
+    // 보안 질문 테이블 생성
+    await this.db.runAsync(`
+      CREATE TABLE IF NOT EXISTS security_questions (
+        id TEXT PRIMARY KEY,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        created_at INTEGER
       );
     `);
 
@@ -347,7 +437,7 @@ class DatabaseService {
        WHERE diary_book_id = ?
        ORDER BY created_at DESC 
        LIMIT ? OFFSET ?`,
-      [currentDiaryBookId, limit, offset]
+      currentDiaryBookId, limit, offset
     ) as any[];
 
     return results.map(row => this.mapRowToDiary(row));
@@ -442,6 +532,74 @@ class DatabaseService {
       'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
       [key, value]
     );
+  }
+
+  // 보안 설정 관련 메서드들
+  async getSecuritySettings(): Promise<SecuritySettings | null> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    const result = await this.db.getFirstAsync(
+      'SELECT * FROM security_settings ORDER BY id DESC LIMIT 1'
+    ) as any;
+
+    if (!result) return null;
+
+    return {
+      isEnabled: Boolean(result.is_enabled),
+      lockType: result.lock_type || 'pin',
+      pinCode: result.pin_code,
+      pattern: result.pattern,
+      biometricEnabled: Boolean(result.biometric_enabled),
+      backupUnlockEnabled: Boolean(result.backup_unlock_enabled),
+      securityQuestions: result.security_questions ? JSON.parse(result.security_questions) : [],
+      createdAt: result.created_at,
+      updatedAt: result.updated_at,
+    };
+  }
+
+  async saveSecuritySettings(settings: SecuritySettings): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    const now = Date.now();
+    await this.db.runAsync(`
+      INSERT OR REPLACE INTO security_settings 
+      (is_enabled, lock_type, pin_code, pattern, biometric_enabled, backup_unlock_enabled, security_questions, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      settings.isEnabled ? 1 : 0,
+      settings.lockType,
+      settings.pinCode || null,
+      settings.pattern || null,
+      settings.biometricEnabled ? 1 : 0,
+      settings.backupUnlockEnabled ? 1 : 0,
+      settings.securityQuestions ? JSON.stringify(settings.securityQuestions) : null,
+      settings.createdAt || now,
+      now,
+    ]);
+  }
+
+  async updateSecuritySettings(updates: Partial<SecuritySettings>): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    const existing = await this.getSecuritySettings();
+    if (!existing) {
+      throw new Error('보안 설정이 존재하지 않습니다.');
+    }
+
+    const updatedSettings: SecuritySettings = {
+      ...existing,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+
+    await this.saveSecuritySettings(updatedSettings);
+  }
+
+  async deleteSecuritySettings(): Promise<void> {
+    if (!this.db) throw new Error('데이터베이스가 초기화되지 않았습니다.');
+
+    await this.db.runAsync('DELETE FROM security_settings');
+    await this.db.runAsync('DELETE FROM security_questions');
   }
 
   // 유틸리티 메서드

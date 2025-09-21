@@ -34,6 +34,30 @@ export interface Settings {
   maxImageSize: number; // MB
 }
 
+// 보안 설정 관련 타입 정의
+export interface SecuritySettings {
+  isEnabled: boolean;
+  lockType: 'pin' | 'pattern' | 'biometric';
+  pinCode?: string; // 해시된 PIN 코드
+  pattern?: string; // 패턴 데이터 (JSON 문자열)
+  biometricEnabled: boolean;
+  backupUnlockEnabled: boolean; // 백업 잠금해제 활성화
+  securityQuestions?: SecurityQuestion[]; // 보안 질문
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SecurityQuestion {
+  id: string;
+  question: string;
+  answer: string; // 해시된 답변
+}
+
+export interface PatternData {
+  points: { x: number; y: number }[];
+  connections: number[][];
+}
+
 // 검색 관련 타입 정의
 export interface SearchOptions {
   query: string;
@@ -64,6 +88,13 @@ export type RootStackParamList = {
   GoogleDriveSettings: undefined;
   LanguageSettings: undefined;
   DiaryDetail: { diaryId: string };
+  // 보안 관련 화면들
+  PinSetup: { isFirstTime: boolean };
+  PatternSetup: { isFirstTime: boolean };
+  BiometricSetup: undefined;
+  SecurityQuestions: undefined;
+  AppLock: { isInitialSetup?: boolean };
+  ForgotPassword: undefined;
 };
 
 // 일기장 관련 타입 정의

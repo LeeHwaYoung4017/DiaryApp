@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
+import DatabaseService from '../services/database/DatabaseService';
+import { SecuritySettings } from '../types';
 
 // 화면 컴포넌트들
 import FeedScreen from '../screens/FeedScreen';
@@ -16,14 +19,76 @@ import ThemeSettingsScreen from '../screens/ThemeSettingsScreen';
 import GoogleDriveSettingsScreen from '../screens/GoogleDriveSettingsScreen';
 import LanguageSettingsScreen from '../screens/LanguageSettingsScreen';
 import DiaryDetailScreen from '../screens/DiaryDetailScreen';
+import PinSetupScreen from '../screens/PinSetupScreen';
+import AppLockScreen from '../screens/AppLockScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
 // 메인 스택 네비게이션
 export default function AppNavigator() {
+  const [isLocked, setIsLocked] = useState<boolean | null>(null);
+  const [initialRouteName, setInitialRouteName] = useState<string>('Feed');
+  const [shouldShowLock, setShouldShowLock] = useState(false);
+  const appState = useRef(AppState.currentState);
+  const navigationRef = useRef<any>(null);
+
+  useEffect(() => {
+    checkAppLock();
+    
+    // AppState 변경 감지
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // 앱이 백그라운드에서 포그라운드로 돌아올 때
+        handleAppForeground();
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, []);
+
+  const handleAppForeground = async () => {
+    try {
+      const securitySettings = await DatabaseService.getSecuritySettings();
+      if (securitySettings && securitySettings.isEnabled) {
+        // 잠금이 활성화되어 있으면 잠금 화면으로 이동
+        setShouldShowLock(true);
+        if (navigationRef.current) {
+          navigationRef.current.navigate('AppLock');
+        }
+      }
+    } catch (error) {
+      console.error('앱 포그라운드 잠금 확인 실패:', error);
+    }
+  };
+
+  const checkAppLock = async () => {
+    try {
+      const securitySettings = await DatabaseService.getSecuritySettings();
+      if (securitySettings && securitySettings.isEnabled) {
+        setIsLocked(true);
+        setInitialRouteName('AppLock');
+      } else {
+        setIsLocked(false);
+        setInitialRouteName('Feed');
+      }
+    } catch (error) {
+      console.error('앱 잠금 확인 실패:', error);
+      setIsLocked(false);
+      setInitialRouteName('Feed');
+    }
+  };
+
+  // 로딩 중일 때는 아무것도 렌더링하지 않음
+  if (isLocked === null) {
+    return null;
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
+        initialRouteName={initialRouteName}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#007AFF',
@@ -34,6 +99,11 @@ export default function AppNavigator() {
           },
         }}
       >
+        <Stack.Screen
+          name="AppLock"
+          component={AppLockScreen}
+          options={{ headerShown: false }}
+        />
         <Stack.Screen
           name="Feed"
           component={FeedScreen}
@@ -124,6 +194,14 @@ export default function AppNavigator() {
           component={DiaryDetailScreen}
           options={{
             title: '일기 상세',
+            headerBackTitle: '뒤로',
+          }}
+        />
+        <Stack.Screen
+          name="PinSetup"
+          component={PinSetupScreen}
+          options={{
+            title: 'PIN 설정',
             headerBackTitle: '뒤로',
           }}
         />

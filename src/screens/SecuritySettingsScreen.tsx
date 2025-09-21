@@ -9,50 +9,56 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import DatabaseService from '../services/database/DatabaseService';
+import SecurityService from '../services/SecurityService';
+import { SecuritySettings } from '../types';
 
 export default function SecuritySettingsScreen() {
-  const [isLockEnabled, setIsLockEnabled] = useState(false);
-  const [lockType, setLockType] = useState<'pin' | 'pattern' | 'biometric'>('pin');
+  const navigation = useNavigation();
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadSecuritySettings();
   }, []);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSecuritySettings();
+    }, [])
+  );
+
   const loadSecuritySettings = async () => {
     try {
       setLoading(true);
-      const lockEnabled = await DatabaseService.getSetting('isLockEnabled');
-      const lockTypeSetting = await DatabaseService.getSetting('lockType');
-      
-      setIsLockEnabled(lockEnabled === 'true');
-      setLockType((lockTypeSetting as any) || 'pin');
+      const settings = await DatabaseService.getSecuritySettings();
+      if (settings) {
+        setSecuritySettings(settings);
+      } else {
+        // 기본 설정 생성
+        const defaultSettings = SecurityService.getDefaultSecuritySettings();
+        setSecuritySettings(defaultSettings);
+      }
     } catch (error) {
       console.error('보안 설정 로드 실패:', error);
+      Alert.alert('오류', '보안 설정을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLockToggle = async (value: boolean) => {
+    if (!securitySettings) return;
+
     if (value) {
-      // 암호 설정 활성화
-      Alert.alert(
-        '암호 설정',
-        '암호 설정 방법을 선택하세요:',
-        [
-          { text: 'PIN', onPress: () => setLockTypeAndEnable('pin') },
-          { text: '패턴', onPress: () => setLockTypeAndEnable('pattern') },
-          { text: '생체인증', onPress: () => setLockTypeAndEnable('biometric') },
-          { text: '취소', style: 'cancel' }
-        ]
-      );
+      // 앱 잠금 활성화 - 바로 PIN 설정으로 이동
+      navigateToPinSetup(true);
     } else {
       // 암호 설정 비활성화
       Alert.alert(
-        '암호 해제',
-        '정말로 암호 설정을 해제하시겠습니까?',
+        '앱 잠금 해제',
+        '정말로 앱 잠금을 해제하시겠습니까?',
         [
           { text: '취소', style: 'cancel' },
           { text: '해제', style: 'destructive', onPress: disableLock }
@@ -61,37 +67,77 @@ export default function SecuritySettingsScreen() {
     }
   };
 
-  const setLockTypeAndEnable = async (type: 'pin' | 'pattern' | 'biometric') => {
-    try {
-      setLockType(type);
-      setIsLockEnabled(true);
-      await DatabaseService.setSetting('lockType', type);
-      await DatabaseService.setSetting('isLockEnabled', 'true');
-      
-      // 실제 암호 설정 화면으로 이동 (구현 예정)
-      Alert.alert('성공', `${type === 'pin' ? 'PIN' : type === 'pattern' ? '패턴' : '생체인증'} 설정이 활성화되었습니다.`);
-    } catch (error) {
-      console.error('암호 설정 실패:', error);
-      Alert.alert('오류', '암호 설정에 실패했습니다.');
-    }
+  const navigateToPinSetup = (isFirstTime: boolean) => {
+    (navigation as any).navigate('PinSetup', { isFirstTime });
+  };
+
+  const navigateToPatternSetup = (isFirstTime: boolean) => {
+    Alert.alert('패턴 설정', '패턴 잠금 기능은 아직 구현 중입니다.');
+  };
+
+  const navigateToBiometricSetup = () => {
+    Alert.alert('생체인증 설정', '생체인증 기능은 아직 구현 중입니다.');
   };
 
   const disableLock = async () => {
     try {
-      setIsLockEnabled(false);
-      await DatabaseService.setSetting('isLockEnabled', 'false');
-      Alert.alert('성공', '암호 설정이 해제되었습니다.');
+      if (!securitySettings) return;
+
+      const updatedSettings = {
+        ...securitySettings,
+        isEnabled: false,
+        updatedAt: Date.now(),
+      };
+
+      await DatabaseService.saveSecuritySettings(updatedSettings);
+      setSecuritySettings(updatedSettings);
+      Alert.alert('성공', '앱 잠금이 해제되었습니다.');
     } catch (error) {
-      console.error('암호 해제 실패:', error);
-      Alert.alert('오류', '암호 해제에 실패했습니다.');
+      console.error('앱 잠금 해제 실패:', error);
+      Alert.alert('오류', '앱 잠금 해제에 실패했습니다.');
     }
   };
 
   const changePassword = () => {
-    Alert.alert('암호 변경', '암호 변경 기능을 구현할 예정입니다.');
+    if (!securitySettings) return;
+
+    switch (securitySettings.lockType) {
+      case 'pin':
+        navigateToPinSetup(false);
+        break;
+      case 'pattern':
+        navigateToPatternSetup(false);
+        break;
+      case 'biometric':
+        navigateToBiometricSetup();
+        break;
+    }
+  };
+
+  const changeLockType = () => {
+    Alert.alert(
+      '잠금 방식 변경',
+      '새로운 잠금 방식을 선택하세요:',
+      [
+        { text: 'PIN', onPress: () => navigateToPinSetup(false) },
+        { text: '패턴', onPress: () => navigateToPatternSetup(false) },
+        { text: '생체인증', onPress: () => navigateToBiometricSetup() },
+        { text: '취소', style: 'cancel' }
+      ]
+    );
   };
 
   if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>설정을 불러오는 중...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!securitySettings) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -111,40 +157,30 @@ export default function SecuritySettingsScreen() {
             <View style={styles.settingContent}>
               <Text style={styles.settingTitle}>앱 잠금</Text>
               <Text style={styles.settingSubtitle}>
-                {isLockEnabled ? '활성화됨' : '비활성화됨'}
+                {securitySettings.isEnabled ? '활성화됨' : '비활성화됨'}
               </Text>
             </View>
             <Switch
-              value={isLockEnabled}
+              value={securitySettings.isEnabled}
               onValueChange={handleLockToggle}
               trackColor={{ false: '#E5E5E5', true: '#007AFF' }}
-              thumbColor={isLockEnabled ? '#FFFFFF' : '#FFFFFF'}
+              thumbColor={securitySettings.isEnabled ? '#FFFFFF' : '#FFFFFF'}
             />
           </View>
 
-          {isLockEnabled && (
+          {securitySettings.isEnabled && (
             <>
               <View style={styles.settingItem}>
                 <View style={styles.settingContent}>
                   <Text style={styles.settingTitle}>잠금 방식</Text>
                   <Text style={styles.settingSubtitle}>
-                    {lockType === 'pin' ? 'PIN' : lockType === 'pattern' ? '패턴' : '생체인증'}
+                    {securitySettings.lockType === 'pin' ? 'PIN' : 
+                     securitySettings.lockType === 'pattern' ? '패턴' : '생체인증'}
                   </Text>
                 </View>
                 <TouchableOpacity
                   style={styles.changeButton}
-                  onPress={() => {
-                    Alert.alert(
-                      '잠금 방식 변경',
-                      '새로운 잠금 방식을 선택하세요:',
-                      [
-                        { text: 'PIN', onPress: () => setLockTypeAndEnable('pin') },
-                        { text: '패턴', onPress: () => setLockTypeAndEnable('pattern') },
-                        { text: '생체인증', onPress: () => setLockTypeAndEnable('biometric') },
-                        { text: '취소', style: 'cancel' }
-                      ]
-                    );
-                  }}
+                  onPress={changeLockType}
                 >
                   <Text style={styles.changeButtonText}>변경</Text>
                 </TouchableOpacity>
@@ -154,7 +190,7 @@ export default function SecuritySettingsScreen() {
                 <View style={styles.settingContent}>
                   <Text style={styles.settingTitle}>암호 변경</Text>
                   <Text style={styles.settingSubtitle}>
-                    {lockType === 'biometric' ? '생체인증 재등록' : '새로운 암호 설정'}
+                    {securitySettings.lockType === 'biometric' ? '생체인증 재등록' : '새로운 암호 설정'}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -162,6 +198,21 @@ export default function SecuritySettingsScreen() {
                   onPress={changePassword}
                 >
                   <Text style={styles.changeButtonText}>변경</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.settingItem}>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingTitle}>비밀번호 분실 시 대안</Text>
+                  <Text style={styles.settingSubtitle}>
+                    보안 질문으로 잠금 해제
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.changeButton}
+                  onPress={() => Alert.alert('보안 질문', '보안 질문 기능은 아직 구현 중입니다.')}
+                >
+                  <Text style={styles.changeButtonText}>설정</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -176,13 +227,16 @@ export default function SecuritySettingsScreen() {
               • 앱 잠금을 활성화하면 앱을 열 때마다 인증이 필요합니다.
             </Text>
             <Text style={styles.infoText}>
-              • PIN: 4-6자리 숫자로 설정 가능
+              • PIN: 4-8자리 숫자로 설정 가능
             </Text>
             <Text style={styles.infoText}>
-              • 패턴: 3x3 그리드에서 패턴 그리기
+              • 패턴: 3x3 그리드에서 최소 4개 점을 연결
             </Text>
             <Text style={styles.infoText}>
-              • 생체인증: 지문 또는 얼굴 인식
+              • 생체인증: 지문 또는 얼굴 인식 (기기 지원 시)
+            </Text>
+            <Text style={styles.infoText}>
+              • 비밀번호를 잊어버린 경우 보안 질문으로 잠금을 해제할 수 있습니다.
             </Text>
           </View>
         </View>
