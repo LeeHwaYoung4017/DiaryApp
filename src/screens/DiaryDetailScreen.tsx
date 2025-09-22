@@ -16,11 +16,76 @@ import { Diary } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG } from '../constants';
 import { MOOD_EMOJIS } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 export default function DiaryDetailScreen({ navigation, route }: any) {
+  const { theme } = useTheme();
   const { diaryId } = route.params;
+
+  // 버튼 텍스트 색상을 동적으로 결정하는 함수
+  const getButtonTextColor = (backgroundColor: string): string => {
+    // 특정 색상들에 대한 명시적 텍스트 색상 매핑
+    const colorTextMap: { [key: string]: string } = {
+      // 매우 밝은 파스텔 색상들 - 검은 텍스트
+      '#FFE4E1': '#000000', // 연분홍
+      '#E0FFFF': '#000000', // 연하늘
+      '#F0FFF0': '#000000', // 연민트
+      '#FFF8DC': '#000000', // 연노랑
+      '#FFEFD5': '#000000', // 크림
+      '#FDF5E6': '#000000', // 라벤더
+      '#F5F5DC': '#000000', // 아이보리
+      '#FFFAF0': '#000000', // 스노우
+      '#F0F8FF': '#000000', // 연파랑
+      '#E6E6FA': '#000000', // 연보라
+      '#FFF0F5': '#000000', // 연분홍
+      '#F0FFFF': '#000000', // 연하늘
+      '#F5FFFA': '#000000', // 연민트
+      '#FFFACD': '#000000', // 연노랑
+      '#FFEBCD': '#000000', // 아몬드
+      '#F5F5F5': '#000000', // 회색
+      
+      // 어두운 색상들 - 흰 텍스트
+      '#FF0000': '#FFFFFF', // 빨강
+      '#0000FF': '#FFFFFF', // 파랑
+      '#800080': '#FFFFFF', // 보라
+      '#008000': '#FFFFFF', // 초록
+      '#FF8C00': '#FFFFFF', // 주황
+      '#808080': '#FFFFFF', // 회색
+      
+      // 중간 톤 색상들 - 밝기에 따라 결정
+      '#FFA500': '#000000', // 주황 (밝음)
+      '#FFFF00': '#000000', // 노랑 (밝음)
+      '#00FF00': '#000000', // 초록 (밝음)
+      '#00FFFF': '#000000', // 청록 (밝음)
+      '#90EE90': '#000000', // 연초록 (밝음)
+      '#FFDAB9': '#000000', // 복숭아 (밝음)
+      '#98FB98': '#000000', // 연초록 (밝음)
+      '#F0E68C': '#000000', // 카키 (밝음)
+      '#FF7F50': '#000000', // 연어 (밝음)
+      '#4ECDC4': '#000000', // 청록1 (밝음)
+      '#40E0D0': '#000000', // 청록2 (밝음)
+      '#87CEEB': '#000000', // 하늘 (밝음)
+      '#DDA0DD': '#000000', // 연보라 (밝음)
+      '#FFFFFF': '#000000', // 흰색
+    };
+    
+    // 명시적 매핑이 있으면 사용
+    if (colorTextMap[backgroundColor.toUpperCase()]) {
+      return colorTextMap[backgroundColor.toUpperCase()];
+    }
+    
+    // 매핑이 없으면 밝기 계산으로 결정
+    const hex = backgroundColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    
+    // 밝기 기준으로 결정
+    return brightness > 140 ? '#000000' : '#FFFFFF';
+  };
   const [diary, setDiary] = useState<Diary | null>(null);
   const [loading, setLoading] = useState(true);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -28,6 +93,174 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
   const [imageScale, setImageScale] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
   const [lastTap, setLastTap] = useState(0);
+
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.surface,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    errorText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    contentContainer: {
+      padding: 16,
+    },
+    section: {
+      backgroundColor: theme.background,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.text,
+      lineHeight: 28,
+    },
+    content: {
+      fontSize: 16,
+      color: theme.text,
+      lineHeight: 24,
+    },
+    moodContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    moodEmoji: {
+      fontSize: 24,
+      marginRight: 8,
+    },
+    moodText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    tagsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    tag: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    tagText: {
+      color: theme.text,
+      fontSize: 14,
+    },
+    imagesContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    imageContainer: {
+      width: 100,
+      height: 100,
+      marginRight: 8,
+      marginBottom: 8,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
+    image: {
+      width: '100%',
+      height: '100%',
+    },
+    dateContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    dateText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    buttonContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      padding: 16,
+      backgroundColor: theme.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    editButton: {
+      flex: 1,
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginRight: 8,
+    },
+    editButtonText: {
+      color: getButtonTextColor(theme.primary),
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    deleteButton: {
+      flex: 1,
+      backgroundColor: '#FF3B30',
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    deleteButtonText: {
+      color: getButtonTextColor('#FF3B30'),
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.9)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalImage: {
+      width: screenWidth,
+      height: screenHeight,
+    },
+    modalCloseButton: {
+      position: 'absolute',
+      top: 50,
+      right: 20,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalCloseText: {
+      color: '#FFFFFF',
+      fontSize: 20,
+      fontWeight: 'bold',
+    },
+  });
   
   // useRef로 최신 상태 값 참조
   const currentImageIndexRef = useRef(currentImageIndex);
@@ -168,9 +401,9 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text>로딩 중...</Text>
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.loadingContainer}>
+          <Text style={dynamicStyles.loadingText}>로딩 중...</Text>
         </View>
       </SafeAreaView>
     );
@@ -178,9 +411,9 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
   if (!diary) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text>일기를 찾을 수 없습니다.</Text>
+      <SafeAreaView style={dynamicStyles.container}>
+        <View style={dynamicStyles.errorContainer}>
+          <Text style={dynamicStyles.errorText}>일기를 찾을 수 없습니다.</Text>
         </View>
       </SafeAreaView>
     );
@@ -188,39 +421,39 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+    <SafeAreaView style={dynamicStyles.container}>
+      <ScrollView style={dynamicStyles.scrollView} contentContainerStyle={dynamicStyles.contentContainer}>
         {/* 제목 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>제목</Text>
-          <Text style={styles.title}>{diary.title || '제목 없음'}</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>제목</Text>
+          <Text style={dynamicStyles.title}>{diary.title || '제목 없음'}</Text>
         </View>
 
         {/* 내용 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>내용</Text>
-          <Text style={styles.content}>{diary.content || '내용 없음'}</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>내용</Text>
+          <Text style={dynamicStyles.content}>{diary.content || '내용 없음'}</Text>
         </View>
 
         {/* 기분 */}
         {diary.mood !== null && diary.mood !== undefined && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>기분</Text>
-            <View style={styles.moodContainer}>
-              <Text style={styles.moodEmoji}>{MOOD_EMOJIS[diary.mood] || '😐'}</Text>
-              <Text style={styles.moodText}>{MOOD_CONFIG.labels[diary.mood] || MOOD_CONFIG.labels[2]}</Text>
+          <View style={dynamicStyles.section}>
+            <Text style={dynamicStyles.sectionTitle}>기분</Text>
+            <View style={dynamicStyles.moodContainer}>
+              <Text style={dynamicStyles.moodEmoji}>{MOOD_EMOJIS[diary.mood] || '😐'}</Text>
+              <Text style={dynamicStyles.moodText}>{MOOD_CONFIG.labels[diary.mood] || MOOD_CONFIG.labels[2]}</Text>
             </View>
           </View>
         )}
 
         {/* 태그 */}
         {diary.tags && Array.isArray(diary.tags) && diary.tags.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>태그</Text>
-            <View style={styles.tagsContainer}>
+          <View style={dynamicStyles.section}>
+            <Text style={dynamicStyles.sectionTitle}>태그</Text>
+            <View style={dynamicStyles.tagsContainer}>
               {diary.tags.map((tag, index) => (
-                <View key={index} style={styles.tag}>
-                  <Text style={styles.tagText}>#{tag}</Text>
+                <View key={index} style={dynamicStyles.tag}>
+                  <Text style={dynamicStyles.tagText}>#{tag}</Text>
                 </View>
               ))}
             </View>
@@ -229,18 +462,18 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
 
         {/* 이미지 */}
         {diary.images && Array.isArray(diary.images) && diary.images.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>사진</Text>
-            <View style={styles.imagesContainer}>
+          <View style={dynamicStyles.section}>
+            <Text style={dynamicStyles.sectionTitle}>사진</Text>
+            <View style={dynamicStyles.imagesContainer}>
               {diary.images.map((image, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={styles.imageContainer}
+                  style={dynamicStyles.imageContainer}
                   onPress={() => handleImagePress(index)}
                 >
                   <Image
                     source={{ uri: image || '' }}
-                    style={styles.image}
+                    style={dynamicStyles.image}
                     resizeMode="cover"
                   />
                 </TouchableOpacity>
@@ -250,29 +483,29 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
         )}
 
         {/* 메타데이터 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>작성 정보</Text>
-          <Text style={styles.metaText}>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>작성 정보</Text>
+          <Text style={dynamicStyles.dateText}>
             작성일: {new Date(diary.created_at).toLocaleDateString('ko-KR')}
           </Text>
           {diary.updated_at !== diary.created_at && (
-            <Text style={styles.metaText}>
+            <Text style={dynamicStyles.dateText}>
               수정일: {new Date(diary.updated_at).toLocaleDateString('ko-KR')}
             </Text>
           )}
         </View>
 
         {/* 하단 여백 */}
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* 하단 버튼들 */}
-      <View style={styles.bottomButtons}>
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteButtonText}>삭제</Text>
+      <View style={dynamicStyles.buttonContainer}>
+        <TouchableOpacity style={dynamicStyles.deleteButton} onPress={handleDelete}>
+          <Text style={dynamicStyles.deleteButtonText}>삭제</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
-          <Text style={styles.editButtonText}>편집</Text>
+        <TouchableOpacity style={dynamicStyles.editButton} onPress={handleEdit}>
+          <Text style={dynamicStyles.editButtonText}>편집</Text>
         </TouchableOpacity>
       </View>
 
@@ -283,28 +516,28 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
         animationType="fade"
         onRequestClose={() => setShowImageModal(false)}
       >
-        <View style={styles.imageModalOverlay}>
+        <View style={dynamicStyles.modalOverlay}>
           <TouchableOpacity
-            style={styles.imageModalCloseArea}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             onPress={() => setShowImageModal(false)}
           />
-          <View style={styles.imageModalContainer}>
+          <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
             <TouchableOpacity
-              style={styles.imageModalCloseButton}
+              style={dynamicStyles.modalCloseButton}
               onPress={() => setShowImageModal(false)}
             >
-              <Text style={styles.imageModalCloseText}>✕</Text>
+              <Text style={dynamicStyles.modalCloseText}>✕</Text>
             </TouchableOpacity>
             
-            <View style={styles.imageModalContent}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}>
               <View
                 {...panResponder.panHandlers}
-                style={styles.imageTouchable}
+                style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
               >
                 <Image
                   source={{ uri: diary?.images[currentImageIndex] }}
                   style={[
-                    styles.imageModalImage,
+                    dynamicStyles.modalImage,
                     { transform: [{ scale: imageScale }] }
                   ]}
                   resizeMode="contain"
@@ -312,23 +545,23 @@ export default function DiaryDetailScreen({ navigation, route }: any) {
               </View>
               
               {diary && diary.images.length > 1 && (
-                <View style={styles.imageModalNavigation}>
+                <View style={{ position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20 }}>
                   <TouchableOpacity
-                    style={styles.imageModalNavButton}
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 25, width: 50, height: 50, justifyContent: 'center', alignItems: 'center' }}
                     onPress={handlePrevImage}
                   >
-                    <Text style={styles.imageModalNavText}>‹</Text>
+                    <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 'bold' }}>‹</Text>
                   </TouchableOpacity>
                   
-                  <Text style={styles.imageModalCounter}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, backgroundColor: 'rgba(0, 0, 0, 0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15 }}>
                     {currentImageIndex + 1} / {diary.images.length}
                   </Text>
                   
                   <TouchableOpacity
-                    style={styles.imageModalNavButton}
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', borderRadius: 25, width: 50, height: 50, justifyContent: 'center', alignItems: 'center' }}
                     onPress={handleNextImage}
                   >
-                    <Text style={styles.imageModalNavText}>›</Text>
+                    <Text style={{ color: '#FFFFFF', fontSize: 24, fontWeight: 'bold' }}>›</Text>
                   </TouchableOpacity>
                 </View>
               )}

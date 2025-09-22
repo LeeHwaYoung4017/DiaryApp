@@ -12,8 +12,10 @@ import { Diary } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG } from '../constants';
 import { MOOD_EMOJIS } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function SearchScreen({ navigation }: any) {
+  const { theme } = useTheme();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Diary[]>([]);
   const [loading, setLoading] = useState(false);

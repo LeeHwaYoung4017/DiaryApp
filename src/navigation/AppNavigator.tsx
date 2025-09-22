@@ -6,6 +6,7 @@ import * as SQLite from 'expo-sqlite';
 import { RootStackParamList } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { SecuritySettings } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 // 화면 컴포넌트들
 import FeedScreen from '../screens/FeedScreen';
@@ -27,8 +28,72 @@ import AppLockScreen from '../screens/AppLockScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
+// 헤더 텍스트 색상 결정 함수
+const getHeaderTextColor = (customColor: string): string => {
+  // 특정 색상들에 대한 명시적 텍스트 색상 매핑
+  const colorTextMap: { [key: string]: string } = {
+    // 매우 밝은 파스텔 색상들 - 검은 텍스트
+    '#FFE4E1': '#000000', // 연분홍
+    '#E0FFFF': '#000000', // 연하늘
+    '#F0FFF0': '#000000', // 연민트
+    '#FFF8DC': '#000000', // 연노랑
+    '#FFEFD5': '#000000', // 크림
+    '#FDF5E6': '#000000', // 라벤더
+    '#F5F5DC': '#000000', // 아이보리
+    '#FFFAF0': '#000000', // 스노우
+    '#F0F8FF': '#000000', // 연파랑
+    '#E6E6FA': '#000000', // 연보라
+    '#FFF0F5': '#000000', // 연분홍
+    '#F0FFFF': '#000000', // 연하늘
+    '#F5FFFA': '#000000', // 연민트
+    '#FFFACD': '#000000', // 연노랑
+    '#FFEBCD': '#000000', // 아몬드
+    '#F5F5F5': '#000000', // 회색
+    
+    // 어두운 색상들 - 흰 텍스트
+    '#FF0000': '#FFFFFF', // 빨강
+    '#0000FF': '#FFFFFF', // 파랑
+    '#800080': '#FFFFFF', // 보라
+    '#008000': '#FFFFFF', // 초록
+    '#FF8C00': '#FFFFFF', // 주황
+    '#808080': '#FFFFFF', // 회색
+    
+    // 중간 톤 색상들 - 밝기에 따라 결정
+    '#FFA500': '#000000', // 주황 (밝음)
+    '#FFFF00': '#000000', // 노랑 (밝음)
+    '#00FF00': '#000000', // 초록 (밝음)
+    '#00FFFF': '#000000', // 청록 (밝음)
+    '#90EE90': '#000000', // 연초록 (밝음)
+    '#FFDAB9': '#000000', // 복숭아 (밝음)
+    '#98FB98': '#000000', // 연초록 (밝음)
+    '#F0E68C': '#000000', // 카키 (밝음)
+    '#FF7F50': '#000000', // 연어 (밝음)
+    '#4ECDC4': '#000000', // 청록1 (밝음)
+    '#40E0D0': '#000000', // 청록2 (밝음)
+    '#87CEEB': '#000000', // 하늘 (밝음)
+    '#DDA0DD': '#000000', // 연보라 (밝음)
+    '#FFFFFF': '#000000', // 흰색
+  };
+  
+  // 명시적 매핑이 있으면 사용
+  if (colorTextMap[customColor.toUpperCase()]) {
+    return colorTextMap[customColor.toUpperCase()];
+  }
+  
+  // 매핑이 없으면 밝기 계산으로 결정
+  const hex = customColor.replace('#', '');
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // 밝기 기준으로 결정
+  return brightness > 140 ? '#000000' : '#FFFFFF';
+};
+
 // 메인 스택 네비게이션
 export default function AppNavigator() {
+  const { theme } = useTheme();
   const [isLocked, setIsLocked] = useState<boolean | null>(null);
   const [initialRouteName, setInitialRouteName] = useState<string>('Feed');
   const [shouldShowLock, setShouldShowLock] = useState(false);
@@ -124,11 +189,12 @@ export default function AppNavigator() {
         initialRouteName={initialRouteName}
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#007AFF',
+            backgroundColor: theme.type === 'dark' ? '#1C1C1E' : theme.primary,
           },
-          headerTintColor: '#FFFFFF',
+          headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
           headerTitleStyle: {
             fontWeight: 'bold',
+            color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
           },
         }}
       >
@@ -148,6 +214,11 @@ export default function AppNavigator() {
           options={{
             title: '일기 작성',
             headerBackTitle: '뒤로',
+            headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            },
           }}
         />
         <Stack.Screen
@@ -156,6 +227,11 @@ export default function AppNavigator() {
           options={{
             title: '일기 편집',
             headerBackTitle: '뒤로',
+            headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            },
           }}
         />
         <Stack.Screen
@@ -164,6 +240,11 @@ export default function AppNavigator() {
           options={{
             title: '검색',
             headerBackTitle: '뒤로',
+            headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            },
           }}
         />
         <Stack.Screen
@@ -172,6 +253,11 @@ export default function AppNavigator() {
           options={{
             title: '설정',
             headerBackTitle: '뒤로',
+            headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            },
           }}
         />
         <Stack.Screen
@@ -204,6 +290,11 @@ export default function AppNavigator() {
           options={{
             title: '테마선택',
             headerBackTitle: '뒤로',
+            headerTintColor: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            headerTitleStyle: {
+              fontWeight: 'bold',
+              color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+            },
           }}
         />
         <Stack.Screen

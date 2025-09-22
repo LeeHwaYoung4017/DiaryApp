@@ -9,18 +9,34 @@ class DatabaseService {
 
   async init(): Promise<void> {
     try {
-      // 기존 데이터베이스 연결 정리
+      // 기존 데이터베이스 연결이 있으면 안전하게 닫기
       if (this.db) {
         try {
           await this.db.closeAsync();
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 더 긴 대기 시간
         } catch (closeError) {
           console.log('데이터베이스 닫기 실패 (무시):', closeError);
         }
         this.db = null;
       }
 
-      // 새로운 데이터베이스 생성
-      this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
+      // 데이터베이스가 이미 열려있는지 확인하고 안전하게 열기
+      let retryCount = 0;
+      const maxRetries = 5; // 재시도 횟수 증가
+      
+      while (retryCount < maxRetries) {
+        try {
+          this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
+          break;
+        } catch (openError) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw openError;
+          }
+          console.log(`데이터베이스 열기 재시도 ${retryCount}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // 더 긴 대기 시간
+        }
+      }
       
       // WAL 모드 활성화로 동시 접근 개선
       await this.db.execAsync('PRAGMA journal_mode=WAL;');
@@ -33,11 +49,33 @@ class DatabaseService {
       console.log('데이터베이스 초기화 완료');
     } catch (error) {
       console.error('데이터베이스 초기화 실패:', error);
-      // 초기화 실패 시 데이터베이스 재생성 시도
+      
+      // 초기화 실패 시 데이터베이스 재생성 시도 (더 안전하게)
       try {
         console.log('데이터베이스 재생성 시도...');
-        await SQLite.deleteDatabaseAsync(DB_CONFIG.name);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 기존 연결 완전히 정리
+        if (this.db) {
+          try {
+            await this.db.closeAsync();
+          } catch (closeError) {
+            console.log('재생성 전 데이터베이스 닫기 실패 (무시):', closeError);
+          }
+          this.db = null;
+        }
+        
+        // 충분한 대기 시간 후 재생성
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // 데이터베이스 삭제 시도 (실패해도 계속 진행)
+        try {
+          await SQLite.deleteDatabaseAsync(DB_CONFIG.name);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (deleteError) {
+          console.log('데이터베이스 삭제 실패 (무시):', deleteError);
+        }
+        
+        // 새로운 데이터베이스 생성
         this.db = await SQLite.openDatabaseAsync(DB_CONFIG.name);
         await this.db.execAsync('PRAGMA journal_mode=WAL;');
         await this.db.execAsync('PRAGMA synchronous=NORMAL;');
@@ -46,37 +84,58 @@ class DatabaseService {
         console.log('데이터베이스 재생성 완료');
       } catch (retryError) {
         console.error('데이터베이스 재생성 실패:', retryError);
-        throw retryError;
+        // 재생성도 실패하면 기본 데이터베이스로 계속 진행
+        console.log('기본 데이터베이스로 계속 진행...');
+        this.db = null;
       }
     }
   }
 
   private async executeWithRetry<T>(
     operation: () => Promise<T>,
-    maxRetries: number = 3,
-    delay: number = 500
+    maxRetries: number = 5,
+    delay: number = 1000
   ): Promise<T> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // 데이터베이스 연결 확인
+        // 데이터베이스 연결 확인 및 재초기화
         if (!this.db) {
           await this.init();
         }
+        
+        // 데이터베이스가 여전히 null이면 재시도
+        if (!this.db) {
+          throw new Error('데이터베이스 연결 실패');
+        }
+        
         return await operation();
       } catch (error) {
-        if (error instanceof Error && (
+        const isRetryableError = error instanceof Error && (
           error.message.includes('database is locked') ||
           error.message.includes('database is closed') ||
           error.message.includes('finalizeAsync') ||
-          error.message.includes('NullPointerException')
-        )) {
+          error.message.includes('NullPointerException') ||
+          error.message.includes('Access to closed resource') ||
+          error.message.includes('prepareAsync') ||
+          error.message.includes('shared object that was already released') ||
+          error.message.includes('Unable to delete database') ||
+          error.message.includes('currently open')
+        );
+        
+        if (isRetryableError) {
           if (attempt === maxRetries) {
             console.error(`데이터베이스 작업 실패 (${maxRetries}회 재시도 후):`, error);
             // 마지막 시도에서도 실패하면 데이터베이스 재초기화
             try {
+              console.log('데이터베이스 재초기화 시도...');
               await this.init();
-              return await operation();
+              if (this.db) {
+                return await operation();
+              } else {
+                throw new Error('데이터베이스 재초기화 실패');
+              }
             } catch (finalError) {
+              console.error('데이터베이스 재초기화 실패:', finalError);
               throw finalError;
             }
           }

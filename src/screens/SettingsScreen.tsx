@@ -8,11 +8,14 @@ import {
   Alert,
   Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Settings } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
-import { LANGUAGE_CONFIG, THEME_CONFIG } from '../constants';
+import { LANGUAGE_CONFIG } from '../constants';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function SettingsScreen({ navigation }: any) {
+  const { theme } = useTheme();
   const [settings, setSettings] = useState<Settings>({
     appTitle: '일기제목',
     theme: 'light',
@@ -120,6 +123,50 @@ export default function SettingsScreen({ navigation }: any) {
     navigation.navigate('Chart');
   };
 
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.surface,
+    },
+    section: {
+      backgroundColor: theme.background,
+      borderRadius: 8,
+      margin: 16,
+      marginBottom: 8,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      padding: 16,
+      paddingBottom: 8,
+    },
+    settingItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    settingContent: {
+      flex: 1,
+    },
+    settingTitle: {
+      fontSize: 16,
+      color: theme.text,
+      marginBottom: 2,
+    },
+    settingSubtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    chevron: {
+      fontSize: 18,
+      color: theme.textSecondary,
+      marginLeft: 8,
+    },
+  });
+
   const renderSettingItem = (
     title: string,
     subtitle?: string,
@@ -127,49 +174,50 @@ export default function SettingsScreen({ navigation }: any) {
     rightElement?: React.ReactNode
   ) => (
     <TouchableOpacity
-      style={styles.settingItem}
+      style={dynamicStyles.settingItem}
       onPress={onPress}
       disabled={!onPress}
     >
-      <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+      <View style={dynamicStyles.settingContent}>
+        <Text style={dynamicStyles.settingTitle}>{title}</Text>
+        {subtitle && <Text style={dynamicStyles.settingSubtitle}>{subtitle}</Text>}
       </View>
       {rightElement}
     </TouchableOpacity>
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={dynamicStyles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
       {/* 기본 설정 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>기본 설정</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>기본 설정</Text>
         
         {renderSettingItem(
           '일기제목 변경',
           settings.appTitle,
           handleAppTitleChange,
-          <Text style={styles.chevron}>›</Text>
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
         
         {renderSettingItem(
           '일기추가',
           '작성 바로가기',
           () => navigation.navigate('Write'),
-          <Text style={styles.chevron}>›</Text>
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
         
         {renderSettingItem(
           '일기선택',
           '다중 선택/삭제/내보내기',
           handleDiarySelection,
-          <Text style={styles.chevron}>›</Text>
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
       </View>
 
       {/* 보안 설정 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>보안 설정</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>보안 설정</Text>
         
         {renderSettingItem(
           '앱 잠금',
@@ -178,33 +226,22 @@ export default function SettingsScreen({ navigation }: any) {
           <Switch
             value={settings.isLockEnabled}
             onValueChange={handleLockToggle}
-            trackColor={{ false: '#E5E5E5', true: '#007AFF' }}
+            trackColor={{ false: theme.border, true: theme.primary }}
             thumbColor={settings.isLockEnabled ? '#FFFFFF' : '#FFFFFF'}
           />
         )}
         
         {renderSettingItem(
           '테마선택',
-          THEME_CONFIG[settings.theme] ? '라이트/다크/커스텀' : '라이트/다크/커스텀',
-          () => {
-            Alert.alert(
-              '테마 선택',
-              '테마를 선택하세요:',
-              [
-                { text: '라이트', onPress: () => handleThemeChange('light') },
-                { text: '다크', onPress: () => handleThemeChange('dark') },
-                { text: '커스텀', onPress: () => handleThemeChange('custom') },
-                { text: '취소', style: 'cancel' }
-              ]
-            );
-          },
-          <Text style={styles.chevron}>›</Text>
+          theme.type === 'light' ? '라이트' : theme.type === 'dark' ? '다크' : '커스텀',
+          () => navigation.navigate('ThemeSettings'),
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
       </View>
 
       {/* 클라우드 설정 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>클라우드 설정</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>클라우드 설정</Text>
         
         {renderSettingItem(
           '구글드라이브 연동',
@@ -213,7 +250,7 @@ export default function SettingsScreen({ navigation }: any) {
           <Switch
             value={settings.isGoogleDriveEnabled}
             onValueChange={handleGoogleDriveToggle}
-            trackColor={{ false: '#E5E5E5', true: '#007AFF' }}
+            trackColor={{ false: theme.border, true: theme.primary }}
             thumbColor={settings.isGoogleDriveEnabled ? '#FFFFFF' : '#FFFFFF'}
           />
         )}
@@ -225,21 +262,21 @@ export default function SettingsScreen({ navigation }: any) {
           <Switch
             value={settings.autoBackup}
             onValueChange={handleAutoBackupToggle}
-            trackColor={{ false: '#E5E5E5', true: '#007AFF' }}
+            trackColor={{ false: theme.border, true: theme.primary }}
             thumbColor={settings.autoBackup ? '#FFFFFF' : '#FFFFFF'}
           />
         )}
       </View>
 
       {/* 분석 및 기타 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>분석 및 기타</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>분석 및 기타</Text>
         
         {renderSettingItem(
           '기분차트',
           '기간별 분석',
           handleMoodChart,
-          <Text style={styles.chevron}>›</Text>
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
         
         {renderSettingItem(
@@ -258,13 +295,13 @@ export default function SettingsScreen({ navigation }: any) {
               ]
             );
           },
-          <Text style={styles.chevron}>›</Text>
+          <Text style={dynamicStyles.chevron}>›</Text>
         )}
       </View>
 
       {/* 앱 정보 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>앱 정보</Text>
+      <View style={dynamicStyles.section}>
+        <Text style={dynamicStyles.sectionTitle}>앱 정보</Text>
         
         {renderSettingItem(
           '버전',
@@ -280,53 +317,13 @@ export default function SettingsScreen({ navigation }: any) {
           undefined
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  section: {
-    backgroundColor: '#FFFFFF',
-    marginTop: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#8E8E93',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F2F2F7',
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  settingContent: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 16,
-    color: '#000000',
-    marginBottom: 2,
-  },
-  settingSubtitle: {
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  chevron: {
-    fontSize: 18,
-    color: '#C6C6C8',
-    marginLeft: 8,
   },
 });

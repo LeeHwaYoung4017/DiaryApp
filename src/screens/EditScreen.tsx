@@ -13,8 +13,10 @@ import {
 import { Diary, MoodType, MOOD_EMOJIS } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, APP_CONFIG } from '../constants';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function EditScreen({ navigation, route }: any) {
+  const { theme } = useTheme();
   const { diaryId } = route.params;
   const [diary, setDiary] = useState<Diary | null>(null);
   const [title, setTitle] = useState('');

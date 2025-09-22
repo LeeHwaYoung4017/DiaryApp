@@ -17,8 +17,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { Diary, MoodType, MOOD_EMOJIS } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, APP_CONFIG } from '../constants';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function WriteScreen({ navigation }: any) {
+  const { theme } = useTheme();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [mood, setMood] = useState<MoodType>(3);
@@ -157,46 +159,312 @@ export default function WriteScreen({ navigation }: any) {
     setTags(tags.filter(tag => tag !== tagToRemove));
   };
 
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.surface,
+    },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    section: {
+      backgroundColor: theme.background,
+      margin: 16,
+      marginBottom: 8,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    titleInput: {
+      fontSize: 18,
+      color: theme.text,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      paddingVertical: 8,
+      backgroundColor: 'transparent',
+    },
+    charCount: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      textAlign: 'right',
+      marginTop: 4,
+    },
+    moodContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+    },
+    moodButton: {
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginBottom: 8,
+      minWidth: '30%',
+    },
+    selectedMoodButton: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    moodEmoji: {
+      fontSize: 24,
+      marginBottom: 4,
+    },
+    moodLabel: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      textAlign: 'center',
+    },
+    selectedMoodLabel: {
+      color: theme.text,
+      fontWeight: 'bold',
+    },
+    contentInput: {
+      fontSize: 16,
+      color: theme.text,
+      textAlignVertical: 'top',
+      backgroundColor: 'transparent',
+      minHeight: 200,
+    },
+    tagContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginBottom: 8,
+    },
+    tag: {
+      backgroundColor: theme.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    tagText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+    },
+    tagInput: {
+      fontSize: 16,
+      color: theme.text,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      paddingVertical: 8,
+      backgroundColor: 'transparent',
+    },
+    imageContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginBottom: 8,
+    },
+    imageItem: {
+      width: 80,
+      height: 80,
+      marginRight: 8,
+      marginBottom: 8,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
+    image: {
+      width: '100%',
+      height: '100%',
+    },
+    addImageButton: {
+      width: 80,
+      height: 80,
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.border,
+      borderStyle: 'dashed',
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    addImageText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      textAlign: 'center',
+    },
+    buttonContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      padding: 16,
+      backgroundColor: theme.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    saveButton: {
+      flex: 1,
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginRight: 8,
+    },
+    saveButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    cancelButton: {
+      flex: 1,
+      backgroundColor: theme.surface,
+      paddingVertical: 16,
+      borderRadius: 8,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    cancelButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: theme.background,
+      borderRadius: 12,
+      padding: 20,
+      width: '80%',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    modalButton: {
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    modalButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
+    modalCancelButton: {
+      backgroundColor: theme.surface,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modalCancelButtonText: {
+      color: theme.text,
+      fontSize: 16,
+    },
+    imageButton: {
+      backgroundColor: theme.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    imageButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
+    imagePreviewContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 8,
+    },
+    imagePreviewItem: {
+      position: 'relative',
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    imagePreview: {
+      width: 80,
+      height: 80,
+      borderRadius: 8,
+    },
+    removeImageButton: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      backgroundColor: '#FF3B30',
+      borderRadius: 10,
+      width: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    removeImageText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+  });
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={dynamicStyles.container}>
       <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
+        style={dynamicStyles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView style={dynamicStyles.scrollView} showsVerticalScrollIndicator={false}>
         {/* 제목 입력 */}
-        <View style={styles.section}>
-          <Text style={styles.label}>제목</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.label}>제목</Text>
           <TextInput
-            style={styles.titleInput}
+            style={dynamicStyles.titleInput}
             value={title}
             onChangeText={setTitle}
             placeholder="제목을 입력하세요..."
+            placeholderTextColor={theme.textSecondary}
             maxLength={APP_CONFIG.maxTitleLength}
             multiline={false}
           />
-          <Text style={styles.charCount}>
+          <Text style={dynamicStyles.charCount}>
             {title.length}/{APP_CONFIG.maxTitleLength}
           </Text>
         </View>
 
         {/* 기분 선택 */}
-        <View style={styles.section}>
-          <Text style={styles.label}>기분</Text>
-          <View style={styles.moodContainer}>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.label}>기분</Text>
+          <View style={dynamicStyles.moodContainer}>
             {Object.entries(MOOD_EMOJIS).map(([moodValue, emoji]) => (
               <TouchableOpacity
                 key={moodValue}
                 style={[
-                  styles.moodButton,
-                  mood === parseInt(moodValue) && styles.selectedMoodButton
+                  dynamicStyles.moodButton,
+                  mood === parseInt(moodValue) && dynamicStyles.selectedMoodButton
                 ]}
                 onPress={() => setMood(parseInt(moodValue) as MoodType)}
               >
-                <Text style={styles.moodEmoji}>{emoji}</Text>
+                <Text style={dynamicStyles.moodEmoji}>{emoji}</Text>
                 <Text style={[
-                  styles.moodLabel,
-                  mood === parseInt(moodValue) && styles.selectedMoodLabel
+                  dynamicStyles.moodLabel,
+                  mood === parseInt(moodValue) && dynamicStyles.selectedMoodLabel
                 ]}>
                   {MOOD_CONFIG.labels[parseInt(moodValue) as MoodType]}
                 </Text>
@@ -206,18 +474,19 @@ export default function WriteScreen({ navigation }: any) {
         </View>
 
         {/* 본문 입력 */}
-        <View style={styles.section}>
-          <Text style={styles.label}>본문</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.label}>본문</Text>
           <TextInput
-            style={styles.contentInput}
+            style={dynamicStyles.contentInput}
             value={content}
             onChangeText={setContent}
             placeholder="오늘 하루는 어떠셨나요?"
+            placeholderTextColor={theme.textSecondary}
             multiline={true}
             textAlignVertical="top"
             maxLength={APP_CONFIG.maxContentLength}
           />
-          <Text style={styles.charCount}>
+          <Text style={dynamicStyles.charCount}>
             {content.length}/{APP_CONFIG.maxContentLength}
           </Text>
         </View>

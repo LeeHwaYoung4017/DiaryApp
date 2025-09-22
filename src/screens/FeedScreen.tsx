@@ -19,8 +19,73 @@ import { Diary, DiaryBook } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, DATE_FILTER_CONFIG } from '../constants';
 import { MOOD_EMOJIS } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
+
+// 헤더 텍스트 색상 결정 함수
+const getHeaderTextColor = (customColor: string): string => {
+  // 특정 색상들에 대한 명시적 텍스트 색상 매핑
+  const colorTextMap: { [key: string]: string } = {
+    // 매우 밝은 파스텔 색상들 - 검은 텍스트
+    '#FFE4E1': '#000000', // 연분홍
+    '#E0FFFF': '#000000', // 연하늘
+    '#F0FFF0': '#000000', // 연민트
+    '#FFF8DC': '#000000', // 연노랑
+    '#FFEFD5': '#000000', // 크림
+    '#FDF5E6': '#000000', // 라벤더
+    '#F5F5DC': '#000000', // 아이보리
+    '#FFFAF0': '#000000', // 스노우
+    '#F0F8FF': '#000000', // 연파랑
+    '#E6E6FA': '#000000', // 연보라
+    '#FFF0F5': '#000000', // 연분홍
+    '#F0FFFF': '#000000', // 연하늘
+    '#F5FFFA': '#000000', // 연민트
+    '#FFFACD': '#000000', // 연노랑
+    '#FFEBCD': '#000000', // 아몬드
+    '#F5F5F5': '#000000', // 회색
+    
+    // 어두운 색상들 - 흰 텍스트
+    '#FF0000': '#FFFFFF', // 빨강
+    '#0000FF': '#FFFFFF', // 파랑
+    '#800080': '#FFFFFF', // 보라
+    '#008000': '#FFFFFF', // 초록
+    '#FF8C00': '#FFFFFF', // 주황
+    '#808080': '#FFFFFF', // 회색
+    
+    // 중간 톤 색상들 - 밝기에 따라 결정
+    '#FFA500': '#000000', // 주황 (밝음)
+    '#FFFF00': '#000000', // 노랑 (밝음)
+    '#00FF00': '#000000', // 초록 (밝음)
+    '#00FFFF': '#000000', // 청록 (밝음)
+    '#90EE90': '#000000', // 연초록 (밝음)
+    '#FFDAB9': '#000000', // 복숭아 (밝음)
+    '#98FB98': '#000000', // 연초록 (밝음)
+    '#F0E68C': '#000000', // 카키 (밝음)
+    '#FF7F50': '#000000', // 연어 (밝음)
+    '#4ECDC4': '#000000', // 청록1 (밝음)
+    '#40E0D0': '#000000', // 청록2 (밝음)
+    '#87CEEB': '#000000', // 하늘 (밝음)
+    '#DDA0DD': '#000000', // 연보라 (밝음)
+    '#FFFFFF': '#000000', // 흰색
+  };
+  
+  // 명시적 매핑이 있으면 사용
+  if (colorTextMap[customColor.toUpperCase()]) {
+    return colorTextMap[customColor.toUpperCase()];
+  }
+  
+  // 매핑이 없으면 밝기 계산으로 결정
+  const hex = customColor.replace('#', '');
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // 밝기 기준으로 결정
+  return brightness > 140 ? '#000000' : '#FFFFFF';
+};
 
 export default function FeedScreen({ navigation }: any) {
+  const { theme } = useTheme();
   const [diaries, setDiaries] = useState<Diary[]>([]);
   const [diaryBooks, setDiaryBooks] = useState<DiaryBook[]>([]);
   const [currentDiaryBook, setCurrentDiaryBook] = useState<DiaryBook | null>(null);
@@ -136,7 +201,7 @@ export default function FeedScreen({ navigation }: any) {
       const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
       
       return {
-        day: `${month}월${day}일`,
+        day: `${month}/${day}`,
         dayOfWeek: dayNames[dayOfWeek],
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
         isSunday: dayOfWeek === 0,
@@ -402,60 +467,60 @@ export default function FeedScreen({ navigation }: any) {
     
     return (
       <TouchableOpacity
-        style={styles.diaryItem}
+        style={dynamicStyles.diaryItem}
         onPress={() => navigation.navigate('DiaryDetail', { diaryId: item.id })}
       >
-        <View style={styles.diaryContent}>
-          <View style={styles.dateSection}>
+        <View style={dynamicStyles.diaryContent}>
+          <View style={dynamicStyles.dateSection}>
             <Text style={[
-              styles.dateText,
-              dateInfo.isSunday && styles.sundayText,
-              dateInfo.isSaturday && styles.saturdayText
+              dynamicStyles.dateText,
+              dateInfo.isSunday && dynamicStyles.sundayText,
+              dateInfo.isSaturday && dynamicStyles.saturdayText
             ]}>
               {dateInfo.day}
             </Text>
             <Text style={[
-              styles.dayOfWeekText,
-              dateInfo.isSunday && styles.sundayText,
-              dateInfo.isSaturday && styles.saturdayText
+              dynamicStyles.dayOfWeekText,
+              dateInfo.isSunday && dynamicStyles.sundayText,
+              dateInfo.isSaturday && dynamicStyles.saturdayText
             ]}>
               ({dateInfo.dayOfWeek})
             </Text>
           </View>
           
-          <View style={styles.contentSection}>
-            <View style={styles.headerRow}>
-              <Text style={styles.fullDateText}>{formatFullDate(item.created_at)}</Text>
+          <View style={dynamicStyles.contentSection}>
+            <View style={dynamicStyles.headerRow}>
+              <Text style={dynamicStyles.fullDateText}>{formatFullDate(item.created_at)}</Text>
             </View>
             
-            <Text style={styles.titleText} numberOfLines={1}>
+            <Text style={dynamicStyles.titleText} numberOfLines={1}>
               {item.title || (item.content ? item.content.substring(0, 30) + '...' : '제목 없음')}
             </Text>
           </View>
           
-          <View style={styles.moodSection}>
-            <Text style={styles.moodEmoji}>{MOOD_EMOJIS[item.mood] || '😐'}</Text>
+          <View style={dynamicStyles.moodSection}>
+            <Text style={dynamicStyles.moodEmoji}>{MOOD_EMOJIS[item.mood] || '😐'}</Text>
           </View>
           
-          <View style={styles.imageSection}>
+          <View style={dynamicStyles.imageSection}>
             {item.images && item.images.length > 0 ? (
               <TouchableOpacity
                 onPress={() => handleImagePress(item.images, 0)}
-                style={styles.imagePreviewContainer}
+                style={dynamicStyles.imagePreviewContainer}
               >
                 <Image 
                   source={{ uri: item.images[0] || '' }} 
-                  style={styles.imagePreview}
+                  style={dynamicStyles.imagePreview}
                   resizeMode="cover"
                 />
                 {item.images.length > 1 && (
-                  <View style={styles.imageCountBadge}>
-                    <Text style={styles.imageCountText}>+{item.images.length - 1}</Text>
+                  <View style={dynamicStyles.imageCountBadge}>
+                    <Text style={dynamicStyles.imageCountText}>+{item.images.length - 1}</Text>
                   </View>
                 )}
               </TouchableOpacity>
             ) : (
-              <Text style={styles.defaultIcon}>📒</Text>
+              <Text style={dynamicStyles.noImageText}>📒</Text>
             )}
           </View>
         </View>
@@ -463,43 +528,330 @@ export default function FeedScreen({ navigation }: any) {
     );
   };
 
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.surface,
+    },
+    topBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.primary,
+    },
+    appTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.type === 'dark' ? '#FFFFFF' : (theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF'),
+    },
+    addButton: {
+      backgroundColor: theme.type === 'custom' && theme.customColor ? 
+        (getHeaderTextColor(theme.customColor) === '#000000' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)') : 
+        'rgba(255, 255, 255, 0.2)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+    },
+    addButtonText: {
+      color: theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF',
+      fontSize: 20,
+      fontWeight: 'bold',
+    },
+    settingsButton: {
+      backgroundColor: theme.type === 'custom' && theme.customColor ? 
+        (getHeaderTextColor(theme.customColor) === '#000000' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)') : 
+        'rgba(255, 255, 255, 0.2)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    settingsButtonText: {
+      color: theme.type === 'custom' && theme.customColor ? getHeaderTextColor(theme.customColor) : '#FFFFFF',
+      fontSize: 18,
+    },
+    filterBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.background,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    dateFilterButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    dateFilterText: {
+      fontSize: 14,
+      color: theme.text,
+      marginRight: 4,
+    },
+    dateFilterArrow: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    searchButton: {
+      backgroundColor: theme.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    searchButtonText: {
+      fontSize: 16,
+    },
+    listContainer: {
+      padding: 16,
+    },
+    diaryItem: {
+      backgroundColor: theme.background,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    diaryContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    dateSection: {
+      alignItems: 'center',
+      marginRight: 16,
+    },
+    dateText: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    dayOfWeekText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginTop: 2,
+    },
+    sundayText: {
+      color: '#FF3B30',
+    },
+    saturdayText: {
+      color: '#007AFF',
+    },
+    contentSection: {
+      flex: 1,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    fullDateText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    titleText: {
+      fontSize: 16,
+      color: theme.text,
+      fontWeight: '500',
+    },
+    moodSection: {
+      marginLeft: 12,
+    },
+    moodEmoji: {
+      fontSize: 24,
+    },
+    imageSection: {
+      marginLeft: 12,
+    },
+    imagePreviewContainer: {
+      width: 50,
+      height: 50,
+      borderRadius: 8,
+      overflow: 'hidden',
+    },
+    imagePreview: {
+      width: '100%',
+      height: '100%',
+    },
+    imageCountBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      backgroundColor: theme.primary,
+      borderRadius: 10,
+      width: 20,
+      height: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageCountText: {
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontWeight: 'bold',
+    },
+    noImageIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 8,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    noImageText: {
+      fontSize: 20,
+      color: theme.textSecondary,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalBackdrop: {
+      flex: 1,
+    },
+    settingsMenu: {
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      bottom: 0,
+      width: '80%',
+      backgroundColor: theme.background,
+      paddingTop: 50,
+    },
+    settingsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    settingsTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    closeButton: {
+      fontSize: 24,
+      color: theme.textSecondary,
+    },
+    settingsContent: {
+      padding: 20,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 16,
+    },
+    diaryBookItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      marginBottom: 8,
+      backgroundColor: theme.surface,
+    },
+    selectedDiaryBook: {
+      backgroundColor: theme.primary,
+    },
+    diaryBookName: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    selectedDiaryBookName: {
+      color: theme.text,
+    },
+    defaultLabel: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      backgroundColor: theme.surface,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    addDiaryBookButton: {
+      backgroundColor: theme.surface,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      marginTop: 8,
+    },
+    addDiaryBookText: {
+      fontSize: 16,
+      color: theme.text,
+      textAlign: 'center',
+    },
+    settingItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.surface,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    settingItemText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    settingItemArrow: {
+      fontSize: 18,
+      color: theme.textSecondary,
+    },
+  });
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={dynamicStyles.container}>
       {/* 최상단 바 */}
-      <View style={styles.topBar}>
-        <Text style={styles.appTitle}>{currentDiaryBook?.name || '일기장'}</Text>
+      <View style={dynamicStyles.topBar}>
+        <Text style={dynamicStyles.appTitle}>{currentDiaryBook?.name || '일기장'}</Text>
         <View style={styles.topBarButtons}>
           <TouchableOpacity
-            style={styles.addButton}
+            style={dynamicStyles.addButton}
             onPress={handleWriteDiary}
           >
-            <Text style={styles.addButtonText}>✚</Text>
+            <Text style={dynamicStyles.addButtonText}>✚</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.settingsButton}
+            style={dynamicStyles.settingsButton}
             onPress={() => setShowSettings(true)}
           >
-            <Text style={styles.settingsButtonText}>☰</Text>
+            <Text style={dynamicStyles.settingsButtonText}>☰</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* 기간 필터 + 검색 */}
-      <View style={styles.filterBar}>
+      <View style={dynamicStyles.filterBar}>
         <TouchableOpacity 
-          style={styles.dateFilterButton}
+          style={dynamicStyles.dateFilterButton}
           onPress={() => setShowDateFilter(true)}
         >
-          <Text style={styles.dateFilterText}>
+          <Text style={dynamicStyles.dateFilterText}>
             {DATE_FILTER_CONFIG[selectedDateFilter].label}
           </Text>
-          <Text style={styles.dateFilterArrow}>▼</Text>
+          <Text style={dynamicStyles.dateFilterArrow}>▼</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.searchButton}
+          style={dynamicStyles.searchButton}
           onPress={() => navigation.navigate('Search')}
         >
-          <Text style={styles.searchButtonText}>🔍</Text>
+          <Text style={dynamicStyles.searchButtonText}>🔍</Text>
         </TouchableOpacity>
       </View>
 
@@ -511,7 +863,7 @@ export default function FeedScreen({ navigation }: any) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={dynamicStyles.listContainer}
         showsVerticalScrollIndicator={false}
       />
 
@@ -522,115 +874,115 @@ export default function FeedScreen({ navigation }: any) {
         animationType="slide"
         onRequestClose={() => setShowSettings(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={dynamicStyles.modalOverlay}>
           <TouchableOpacity 
-            style={styles.modalBackdrop}
+            style={dynamicStyles.modalBackdrop}
             onPress={() => setShowSettings(false)}
           />
-          <View style={styles.settingsMenu}>
-            <View style={styles.settingsHeader}>
-              <Text style={styles.settingsTitle}>일기장 설정</Text>
+          <View style={dynamicStyles.settingsMenu}>
+            <View style={dynamicStyles.settingsHeader}>
+              <Text style={dynamicStyles.settingsTitle}>일기장 설정</Text>
               <TouchableOpacity onPress={() => setShowSettings(false)}>
-                <Text style={styles.closeButton}>✕</Text>
+                <Text style={dynamicStyles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
             
-            <View style={styles.settingsContent}>
-              <Text style={styles.sectionTitle}>일기장 선택</Text>
+            <View style={dynamicStyles.settingsContent}>
+              <Text style={dynamicStyles.sectionTitle}>일기장 선택</Text>
               {diaryBooks.map((book) => (
                 <TouchableOpacity
                   key={book.id}
                   style={[
-                    styles.diaryBookItem,
-                    currentDiaryBook?.id === book.id && styles.selectedDiaryBook
+                    dynamicStyles.diaryBookItem,
+                    currentDiaryBook?.id === book.id && dynamicStyles.selectedDiaryBook
                   ]}
                   onPress={() => switchDiaryBook(book)}
                 >
                   <Text style={[
-                    styles.diaryBookName,
-                    currentDiaryBook?.id === book.id && styles.selectedDiaryBookName
+                    dynamicStyles.diaryBookName,
+                    currentDiaryBook?.id === book.id && dynamicStyles.selectedDiaryBookName
                   ]}>
                     {book.name}
                   </Text>
                   {book.is_default && (
-                    <Text style={styles.defaultLabel}>기본</Text>
+                    <Text style={dynamicStyles.defaultLabel}>기본</Text>
                   )}
                 </TouchableOpacity>
               ))}
               
               <TouchableOpacity
-                style={styles.addDiaryBookButton}
+                style={dynamicStyles.addDiaryBookButton}
                 onPress={() => setShowNewDiaryBook(true)}
               >
-                <Text style={styles.addDiaryBookText}>+ 새 일기장 추가</Text>
+                <Text style={dynamicStyles.addDiaryBookText}>+ 새 일기장 추가</Text>
               </TouchableOpacity>
 
-              <Text style={styles.sectionTitle}>일기장 설정</Text>
+              <Text style={dynamicStyles.sectionTitle}>일기장 설정</Text>
               
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('DiaryBookSettings', { diaryBookId: currentDiaryBook?.id });
                 }}
               >
-                <Text style={styles.settingItemText}>📝 일기제목 변경</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>📝 일기제목 변경</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('SecuritySettings');
                 }}
               >
-                <Text style={styles.settingItemText}>🔒 암호설정</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>🔒 암호설정</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('ThemeSettings');
                 }}
               >
-                <Text style={styles.settingItemText}>🎨 테마선택</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>🎨 테마선택</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('GoogleDriveSettings');
                 }}
               >
-                <Text style={styles.settingItemText}>☁️ 구글드라이브 연동</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>☁️ 구글드라이브 연동</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('Chart');
                 }}
               >
-                <Text style={styles.settingItemText}>📊 기분차트</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>📊 기분차트</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.settingItem}
+                style={dynamicStyles.settingItem}
                 onPress={() => {
                   setShowSettings(false);
                   navigation.navigate('LanguageSettings');
                 }}
               >
-                <Text style={styles.settingItemText}>🌐 언어선택</Text>
-                <Text style={styles.settingItemArrow}>›</Text>
+                <Text style={dynamicStyles.settingItemText}>🌐 언어선택</Text>
+                <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
             </View>
           </View>
