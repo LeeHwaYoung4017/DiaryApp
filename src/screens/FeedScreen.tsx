@@ -12,6 +12,7 @@ import {
   Image,
   Dimensions,
   PanResponder,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -87,6 +88,7 @@ const getHeaderTextColor = (customColor: string): string => {
 export default function FeedScreen({ navigation }: any) {
   const { theme } = useTheme();
   const [diaries, setDiaries] = useState<Diary[]>([]);
+  const [allDiaries, setAllDiaries] = useState<Diary[]>([]); // 달력용 전체 일기 데이터
   const [diaryBooks, setDiaryBooks] = useState<DiaryBook[]>([]);
   const [currentDiaryBook, setCurrentDiaryBook] = useState<DiaryBook | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,6 +107,11 @@ export default function FeedScreen({ navigation }: any) {
   const [imageScale, setImageScale] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
   const [lastTap, setLastTap] = useState(0);
+  
+  // 새로운 탭 관련 상태
+  const [activeTab, setActiveTab] = useState<'latest' | 'calendar' | 'photos'>('latest');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [photoViewMode, setPhotoViewMode] = useState<'grid' | 'list'>('grid');
   
   // useRef로 최신 상태 값 참조
   const currentImageIndexRef = useRef(currentImageIndex);
@@ -163,6 +170,75 @@ export default function FeedScreen({ navigation }: any) {
       }
     },
   });
+
+  // 달력 관련 함수들
+  const getCalendarDays = (year: number, month: number) => {
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    const days = [];
+    const currentDate = new Date(startDate);
+    
+    for (let i = 0; i < 42; i++) {
+      days.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return days;
+  };
+
+  const getDiariesForDate = (date: Date) => {
+    return allDiaries.filter(diary => {
+      const diaryDate = new Date(diary.created_at);
+      return diaryDate.toDateString() === date.toDateString();
+    });
+  };
+
+  const getPhotosForDate = (date: Date) => {
+    const dayDiaries = getDiariesForDate(date);
+    const photos: string[] = [];
+    dayDiaries.forEach(diary => {
+      if (diary.images && Array.isArray(diary.images)) {
+        photos.push(...diary.images);
+      }
+    });
+    return photos;
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newMonth = new Date(currentMonth);
+    if (direction === 'prev') {
+      newMonth.setMonth(newMonth.getMonth() - 1);
+    } else {
+      newMonth.setMonth(newMonth.getMonth() + 1);
+    }
+    setCurrentMonth(newMonth);
+  };
+
+  // 사진 관련 함수들
+  const getAllPhotos = () => {
+    const allPhotos: { date: Date; photos: string[]; diary: Diary }[] = [];
+    allDiaries.forEach(diary => {
+      if (diary.images && Array.isArray(diary.images) && diary.images.length > 0) {
+        allPhotos.push({
+          date: new Date(diary.created_at),
+          photos: diary.images,
+          diary: diary
+        });
+      }
+    });
+    return allPhotos.sort((a, b) => b.date.getTime() - a.date.getTime());
+  };
+
+  const handlePhotoPress = (photos: string[], diary: Diary) => {
+    setSelectedImages(photos);
+    setCurrentImageIndex(0);
+    setImageScale(1);
+    setIsZoomed(false);
+    setShowImageModal(true);
+  };
 
   // 날짜 포맷팅 함수
   const formatDiaryDate = (date: Date) => {
@@ -251,6 +327,7 @@ export default function FeedScreen({ navigation }: any) {
       setLoading(true);
       // 충분한 수의 일기를 가져온 후 클라이언트에서 날짜 필터링
       const allData = await DatabaseService.getDiaries(1000, 0, currentDiaryBook.id);
+      setAllDiaries(allData); // 달력용 전체 데이터 저장
       
       // 날짜 필터링 적용
       const filteredData = filterDiariesByDate(allData, selectedDateFilter, customStartDate, customEndDate);
@@ -813,6 +890,253 @@ export default function FeedScreen({ navigation }: any) {
       fontSize: 18,
       color: theme.textSecondary,
     },
+    
+    // 탭 관련 스타일
+    tabContainer: {
+      flexDirection: 'row',
+      backgroundColor: theme.background,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    tabButton: {
+      flex: 1,
+      paddingVertical: 16,
+      alignItems: 'center',
+      borderBottomWidth: 2,
+      borderBottomColor: 'transparent',
+    },
+    activeTabButton: {
+      borderBottomColor: theme.primary,
+    },
+    tabText: {
+      fontSize: 16,
+      color: theme.text,
+      fontWeight: '500',
+    },
+    activeTabText: {
+      color: theme.primary,
+      fontWeight: 'bold',
+    },
+    
+    // 달력 관련 스타일
+    calendarContainer: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    calendarHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 20,
+      backgroundColor: theme.background,
+    },
+    calendarScrollView: {
+      flex: 1,
+    },
+    monthNavButton: {
+      padding: 12,
+      borderRadius: 25,
+      backgroundColor: theme.surface,
+      minWidth: 50,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    monthNavText: {
+      fontSize: 24,
+      color: theme.text,
+      fontWeight: 'bold',
+    },
+    monthTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    calendarGrid: {
+      paddingHorizontal: 20,
+      paddingBottom: 30,
+    },
+    weekdayHeader: {
+      flexDirection: 'row',
+      marginBottom: 16,
+      paddingHorizontal: 4,
+    },
+    weekdayText: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      paddingVertical: 12,
+    },
+    dateGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    dateCell: {
+      width: '14.28%',
+      aspectRatio: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+      position: 'relative',
+      marginBottom: 8,
+    },
+    otherMonthDate: {
+      opacity: 0.3,
+    },
+    todayDate: {
+      backgroundColor: theme.primary,
+      borderRadius: 20,
+    },
+    hasDiaryDate: {
+      backgroundColor: theme.primary + '15',
+      borderRadius: 20,
+    },
+    dateText: {
+      fontSize: 18,
+      color: theme.text,
+      fontWeight: '500',
+    },
+    otherMonthText: {
+      color: theme.textSecondary,
+      opacity: 0.5,
+    },
+    todayText: {
+      color: '#FFFFFF',
+      fontWeight: 'bold',
+    },
+    hasDiaryText: {
+      color: theme.text,
+      fontWeight: '600',
+    },
+    photoIndicator: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#FF6B6B',
+    },
+    monthDiaryList: {
+      backgroundColor: theme.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      paddingTop: 20,
+    },
+    monthDiaryListContainer: {
+      padding: 16,
+    },
+    
+    // 사진 관련 스타일
+    photosContainer: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    photosHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      backgroundColor: theme.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    photosTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
+    viewModeButtons: {
+      flexDirection: 'row',
+      backgroundColor: theme.background,
+      borderRadius: 8,
+      padding: 2,
+    },
+    viewModeButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+    },
+    activeViewModeButton: {
+      backgroundColor: theme.primary,
+    },
+    viewModeText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    activeViewModeText: {
+      color: '#FFFFFF',
+      fontWeight: 'bold',
+    },
+    photosListContainer: {
+      padding: 16,
+    },
+    photoGridItem: {
+      flex: 1,
+      margin: 4,
+      aspectRatio: 1,
+    },
+    photoGridContent: {
+      flex: 1,
+      borderRadius: 8,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    photoGridImage: {
+      width: '100%',
+      height: '100%',
+    },
+    photoCountBadge: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    photoCountText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+    photoListItem: {
+      flexDirection: 'row',
+      backgroundColor: theme.background,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    photoListContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    photoListImage: {
+      width: 60,
+      height: 60,
+      borderRadius: 8,
+      marginRight: 12,
+    },
+    photoListInfo: {
+      flex: 1,
+    },
+    photoListDate: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    photoListCount: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
   });
 
   return (
@@ -836,8 +1160,37 @@ export default function FeedScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* 기간 필터 + 검색 */}
-      <View style={dynamicStyles.filterBar}>
+      {/* 탭 네비게이션 */}
+      <View style={dynamicStyles.tabContainer}>
+        <TouchableOpacity
+          style={[dynamicStyles.tabButton, activeTab === 'latest' && dynamicStyles.activeTabButton]}
+          onPress={() => setActiveTab('latest')}
+        >
+          <Text style={[dynamicStyles.tabText, activeTab === 'latest' && dynamicStyles.activeTabText]}>
+            최신
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[dynamicStyles.tabButton, activeTab === 'calendar' && dynamicStyles.activeTabButton]}
+          onPress={() => setActiveTab('calendar')}
+        >
+          <Text style={[dynamicStyles.tabText, activeTab === 'calendar' && dynamicStyles.activeTabText]}>
+            달력
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[dynamicStyles.tabButton, activeTab === 'photos' && dynamicStyles.activeTabButton]}
+          onPress={() => setActiveTab('photos')}
+        >
+          <Text style={[dynamicStyles.tabText, activeTab === 'photos' && dynamicStyles.activeTabText]}>
+            사진
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 기간 필터 + 검색 (최신 탭에서만 표시) */}
+      {activeTab === 'latest' && (
+        <View style={dynamicStyles.filterBar}>
         <TouchableOpacity 
           style={dynamicStyles.dateFilterButton}
           onPress={() => setShowDateFilter(true)}
@@ -854,18 +1207,206 @@ export default function FeedScreen({ navigation }: any) {
           <Text style={dynamicStyles.searchButtonText}>🔍</Text>
         </TouchableOpacity>
       </View>
+      )}
 
-      {/* 피드 목록 */}
-      <FlatList
-        data={diaries}
-        renderItem={renderDiaryItem}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={dynamicStyles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      {/* 탭별 콘텐츠 */}
+      {activeTab === 'latest' && (
+        <FlatList
+          data={diaries}
+          renderItem={renderDiaryItem}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={dynamicStyles.listContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      {activeTab === 'calendar' && (
+        <View style={dynamicStyles.calendarContainer}>
+          {/* 달력 헤더 - 고정 */}
+          <View style={dynamicStyles.calendarHeader}>
+            <TouchableOpacity
+              style={dynamicStyles.monthNavButton}
+              onPress={() => navigateMonth('prev')}
+            >
+              <Text style={dynamicStyles.monthNavText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={dynamicStyles.monthTitle}>
+              {currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월
+            </Text>
+            <TouchableOpacity
+              style={dynamicStyles.monthNavButton}
+              onPress={() => navigateMonth('next')}
+            >
+              <Text style={dynamicStyles.monthNavText}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 스크롤 가능한 영역 */}
+          <ScrollView 
+            style={dynamicStyles.calendarScrollView}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* 달력 그리드 */}
+            <View style={dynamicStyles.calendarGrid}>
+              {/* 요일 헤더 */}
+              <View style={dynamicStyles.weekdayHeader}>
+                {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
+                  <Text key={index} style={dynamicStyles.weekdayText}>{day}</Text>
+                ))}
+              </View>
+
+              {/* 날짜 그리드 */}
+              <View style={dynamicStyles.dateGrid}>
+                {getCalendarDays(currentMonth.getFullYear(), currentMonth.getMonth()).map((date, index) => {
+                  const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
+                  const isToday = date.toDateString() === new Date().toDateString();
+                  const dayDiaries = getDiariesForDate(date);
+                  const hasDiary = dayDiaries.length > 0;
+                  const hasPhotos = getPhotosForDate(date).length > 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        dynamicStyles.dateCell,
+                        !isCurrentMonth && dynamicStyles.otherMonthDate,
+                        isToday && dynamicStyles.todayDate,
+                        hasDiary && {
+                          backgroundColor: theme.type === 'custom' && theme.customColor ? 
+                            (getHeaderTextColor(theme.customColor) === '#000000' ? theme.primary + '40' : theme.primary + '50') : 
+                            theme.primary + '40',
+                          borderRadius: 20,
+                          borderWidth: 2,
+                          borderColor: theme.primary
+                        }
+                      ]}
+                      onPress={() => {
+                        if (hasDiary) {
+                          // 해당 날짜의 첫 번째 일기로 이동
+                          navigation.navigate('DiaryDetail', { diaryId: dayDiaries[0].id });
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        dynamicStyles.dateText,
+                        !isCurrentMonth && dynamicStyles.otherMonthText,
+                        isToday && dynamicStyles.todayText,
+                        hasDiary && {
+                          color: theme.type === 'custom' && theme.customColor ? 
+                            (getHeaderTextColor(theme.customColor) === '#000000' ? '#000000' : '#FFFFFF') : 
+                            '#FFFFFF',
+                          fontWeight: 'bold'
+                        }
+                      ]}>
+                        {date.getDate()}
+                      </Text>
+                      {hasPhotos && (
+                        <View style={dynamicStyles.photoIndicator} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* 이번달 일기 목록 */}
+            <View style={dynamicStyles.monthDiaryList}>
+              <FlatList
+                data={allDiaries.filter(diary => {
+                  const diaryDate = new Date(diary.created_at);
+                  return diaryDate.getFullYear() === currentMonth.getFullYear() && 
+                         diaryDate.getMonth() === currentMonth.getMonth();
+                })}
+                renderItem={renderDiaryItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={dynamicStyles.monthDiaryListContainer}
+                showsVerticalScrollIndicator={false}
+                scrollEnabled={false} // 중첩 스크롤 방지
+              />
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {activeTab === 'photos' && (
+        <View style={dynamicStyles.photosContainer}>
+          {/* 사진 뷰 헤더 */}
+          <View style={dynamicStyles.photosHeader}>
+            <Text style={dynamicStyles.photosTitle}>사진 모음</Text>
+            <View style={dynamicStyles.viewModeButtons}>
+              <TouchableOpacity
+                style={[dynamicStyles.viewModeButton, photoViewMode === 'grid' && dynamicStyles.activeViewModeButton]}
+                onPress={() => setPhotoViewMode('grid')}
+              >
+                <Text style={[dynamicStyles.viewModeText, photoViewMode === 'grid' && dynamicStyles.activeViewModeText]}>
+                  격자
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[dynamicStyles.viewModeButton, photoViewMode === 'list' && dynamicStyles.activeViewModeButton]}
+                onPress={() => setPhotoViewMode('list')}
+              >
+                <Text style={[dynamicStyles.viewModeText, photoViewMode === 'list' && dynamicStyles.activeViewModeText]}>
+                  목록
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* 사진 목록 */}
+          <FlatList
+            data={getAllPhotos()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={photoViewMode === 'grid' ? dynamicStyles.photoGridItem : dynamicStyles.photoListItem}
+                onPress={() => handlePhotoPress(item.photos, item.diary)}
+              >
+                {photoViewMode === 'grid' ? (
+                  <View style={dynamicStyles.photoGridContent}>
+                    <Image
+                      source={{ uri: item.photos[0] }}
+                      style={dynamicStyles.photoGridImage}
+                      resizeMode="cover"
+                    />
+                    {item.photos.length > 1 && (
+                      <View style={dynamicStyles.photoCountBadge}>
+                        <Text style={dynamicStyles.photoCountText}>+{item.photos.length - 1}</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={dynamicStyles.photoListContent}>
+                    <Image
+                      source={{ uri: item.photos[0] }}
+                      style={dynamicStyles.photoListImage}
+                      resizeMode="cover"
+                    />
+                    <View style={dynamicStyles.photoListInfo}>
+                      <Text style={dynamicStyles.photoListDate}>
+                        {item.date.toLocaleDateString('ko-KR')}
+                      </Text>
+                      <Text style={dynamicStyles.photoListCount}>
+                        {item.photos.length}장
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item, index) => `${item.diary.id}-${index}`}
+            numColumns={photoViewMode === 'grid' ? 2 : 1}
+            key={photoViewMode} // 뷰 모드 변경 시 리렌더링
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            contentContainerStyle={dynamicStyles.photosListContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
+      )}
 
       {/* 설정 슬라이드 메뉴 */}
       <Modal
