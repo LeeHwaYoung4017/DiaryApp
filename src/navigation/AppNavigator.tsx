@@ -99,6 +99,7 @@ export default function AppNavigator() {
   const [shouldShowLock, setShouldShowLock] = useState(false);
   const appState = useRef(AppState.currentState);
   const navigationRef = useRef<any>(null);
+  const lastActiveTime = useRef<number>(Date.now());
 
   useEffect(() => {
     initializeApp();
@@ -107,7 +108,13 @@ export default function AppNavigator() {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
         // 앱이 백그라운드에서 포그라운드로 돌아올 때
-        handleAppForeground();
+        const timeDiff = Date.now() - lastActiveTime.current;
+        // 10초 이내로 돌아오면 시스템 모달(사진 선택 등)로 간주하여 잠금 화면으로 이동하지 않음
+        if (timeDiff > 10000) {
+          handleAppForeground();
+        }
+      } else if (nextAppState === 'active') {
+        lastActiveTime.current = Date.now();
       }
       appState.current = nextAppState;
     };
@@ -149,6 +156,19 @@ export default function AppNavigator() {
     try {
       const securitySettings = await DatabaseService.getSecuritySettings();
       if (securitySettings && securitySettings.isEnabled) {
+        // 현재 화면이 WriteScreen이면 잠금 화면으로 이동하지 않음
+        const currentRoute = navigationRef.current?.getCurrentRoute();
+        if (currentRoute?.name === 'Write') {
+          console.log('일기 작성 화면에서는 잠금 화면으로 이동하지 않음');
+          return;
+        }
+        
+        // EditScreen에서도 잠금 화면으로 이동하지 않음
+        if (currentRoute?.name === 'Edit') {
+          console.log('일기 편집 화면에서는 잠금 화면으로 이동하지 않음');
+          return;
+        }
+        
         // 잠금이 활성화되어 있으면 잠금 화면으로 이동
         setShouldShowLock(true);
         if (navigationRef.current) {

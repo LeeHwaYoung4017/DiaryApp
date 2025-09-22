@@ -123,6 +123,7 @@ export default function WriteScreen({ navigation }: any) {
     }
 
     try {
+      const currentDiaryBookId = await DatabaseService.getCurrentDiaryBookId();
       const diaryData: Omit<Diary, 'id' | 'created_at' | 'updated_at'> = {
         title: title.trim(),
         content: content.trim(),
@@ -132,6 +133,7 @@ export default function WriteScreen({ navigation }: any) {
         tags,
         images,
         metadata: {},
+        diary_book_id: currentDiaryBookId,
       };
 
       await DatabaseService.createDiary(diaryData);
