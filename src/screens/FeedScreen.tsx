@@ -21,6 +21,7 @@ import DatabaseService from '../services/database/DatabaseService';
 import { MOOD_CONFIG, DATE_FILTER_CONFIG } from '../constants';
 import { MOOD_EMOJIS } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import GoogleAuthService, { GoogleUser } from '../services/GoogleAuthService';
 
 // 헤더 텍스트 색상 결정 함수
 const getHeaderTextColor = (customColor: string): string => {
@@ -106,6 +107,7 @@ export default function FeedScreen({ navigation }: any) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageScale, setImageScale] = useState(1);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [googleUser, setGoogleUser] = useState<GoogleUser | null>(null);
   const [lastTap, setLastTap] = useState(0);
   
   // 새로운 탭 관련 상태
@@ -301,6 +303,7 @@ export default function FeedScreen({ navigation }: any) {
   useFocusEffect(
     React.useCallback(() => {
       loadDiaryBooks();
+      loadGoogleUser();
       if (currentDiaryBook) {
         loadDiaries();
       }
@@ -317,6 +320,15 @@ export default function FeedScreen({ navigation }: any) {
       setCurrentDiaryBook(current || books[0]);
     } catch (error) {
       console.error('일기장 로드 실패:', error);
+    }
+  };
+
+  const loadGoogleUser = async () => {
+    try {
+      const user = await GoogleAuthService.getCurrentUser();
+      setGoogleUser(user);
+    } catch (error) {
+      console.error('Google 사용자 정보 로드 실패:', error);
     }
   };
 
@@ -821,6 +833,57 @@ export default function FeedScreen({ navigation }: any) {
     },
     closeButton: {
       fontSize: 24,
+      color: theme.textSecondary,
+    },
+    profileSection: {
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    profileItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+    },
+    profileImage: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      marginRight: 12,
+    },
+    profilePlaceholder: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    profilePlaceholderText: {
+      fontSize: 24,
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    profileName: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 2,
+    },
+    profileEmail: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    profileLoginText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 2,
+    },
+    profileLoginSubtext: {
+      fontSize: 12,
       color: theme.textSecondary,
     },
     settingsContent: {
@@ -1428,7 +1491,47 @@ export default function FeedScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             
-            <View style={dynamicStyles.settingsContent}>
+            {/* Google 프로필 섹션 */}
+            <View style={dynamicStyles.profileSection}>
+              {googleUser ? (
+                <TouchableOpacity
+                  style={dynamicStyles.profileItem}
+                  onPress={() => {
+                    setShowSettings(false);
+                    navigation.navigate('UserProfile');
+                  }}
+                >
+                  <Image
+                    source={{ uri: googleUser.picture }}
+                    style={dynamicStyles.profileImage}
+                  />
+                  <View style={dynamicStyles.profileInfo}>
+                    <Text style={dynamicStyles.profileName}>{googleUser.name} 님</Text>
+                    <Text style={dynamicStyles.profileEmail}>{googleUser.email}</Text>
+                  </View>
+                  <Text style={dynamicStyles.settingItemArrow}>›</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={dynamicStyles.profileItem}
+                  onPress={() => {
+                    setShowSettings(false);
+                    navigation.navigate('LoginChoice');
+                  }}
+                >
+                  <View style={dynamicStyles.profilePlaceholder}>
+                    <Text style={dynamicStyles.profilePlaceholderText}>👤</Text>
+                  </View>
+                  <View style={dynamicStyles.profileInfo}>
+                    <Text style={dynamicStyles.profileLoginText}>로그인을 해주세요</Text>
+                    <Text style={dynamicStyles.profileLoginSubtext}>Google Drive 백업 기능을 사용하려면 로그인이 필요합니다</Text>
+                  </View>
+                  <Text style={dynamicStyles.settingItemArrow}>›</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            <ScrollView style={dynamicStyles.settingsContent} showsVerticalScrollIndicator={false}>
               <Text style={dynamicStyles.sectionTitle}>일기장 선택</Text>
               {diaryBooks.map((book) => (
                 <TouchableOpacity
@@ -1525,7 +1628,10 @@ export default function FeedScreen({ navigation }: any) {
                 <Text style={dynamicStyles.settingItemText}>🌐 언어선택</Text>
                 <Text style={dynamicStyles.settingItemArrow}>›</Text>
               </TouchableOpacity>
-            </View>
+              
+              {/* 하단 여유 공간 */}
+              <View style={{ height: 30 }} />
+            </ScrollView>
           </View>
         </View>
       </Modal>

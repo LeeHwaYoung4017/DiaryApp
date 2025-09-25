@@ -7,8 +7,11 @@ import { RootStackParamList } from '../types';
 import DatabaseService from '../services/database/DatabaseService';
 import { SecuritySettings } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
+import GoogleAuthService, { GoogleUser } from '../services/GoogleAuthService';
 
 // 화면 컴포넌트들
+import LoginChoiceScreen from '../screens/LoginChoiceScreen';
+import UserProfileScreen from '../screens/UserProfileScreen';
 import FeedScreen from '../screens/FeedScreen';
 import WriteScreen from '../screens/WriteScreen';
 import EditScreen from '../screens/EditScreen';
@@ -95,7 +98,8 @@ const getHeaderTextColor = (customColor: string): string => {
 export default function AppNavigator() {
   const { theme } = useTheme();
   const [isLocked, setIsLocked] = useState<boolean | null>(null);
-  const [initialRouteName, setInitialRouteName] = useState<string>('Feed');
+  const [initialRouteName, setInitialRouteName] = useState<string>('LoginChoice');
+  const [googleUser, setGoogleUser] = useState<GoogleUser | null>(null);
   const [shouldShowLock, setShouldShowLock] = useState(false);
   const appState = useRef(AppState.currentState);
   const navigationRef = useRef<any>(null);
@@ -140,6 +144,17 @@ export default function AppNavigator() {
         console.log('기존 데이터 사용');
       }
       
+      // Google 로그인 상태 확인
+      const savedUser = await GoogleAuthService.getCurrentUser();
+      if (savedUser) {
+        setGoogleUser(savedUser);
+        setInitialRouteName('Feed');
+        console.log('Google 사용자 로그인됨:', savedUser.name);
+      } else {
+        setInitialRouteName('LoginChoice');
+        console.log('Google 사용자 로그인 안됨');
+      }
+      
       console.log('앱 초기화 완료');
       
       // 앱 잠금 상태 확인
@@ -147,7 +162,7 @@ export default function AppNavigator() {
     } catch (error) {
       console.error('앱 초기화 실패:', error);
       // 초기화 실패 시에도 기본 화면으로 이동
-      setInitialRouteName('Feed');
+      setInitialRouteName('LoginChoice');
       setIsLocked(false);
     }
   };
@@ -185,16 +200,32 @@ export default function AppNavigator() {
       const securitySettings = await DatabaseService.getSecuritySettings();
       if (securitySettings && securitySettings.isEnabled) {
         setIsLocked(true);
-        setInitialRouteName('AppLock');
+        // 잠금이 활성화되어 있으면 현재 초기 라우트를 유지
       } else {
         setIsLocked(false);
-        setInitialRouteName('Feed');
       }
     } catch (error) {
       console.error('앱 잠금 확인 실패:', error);
       // 오류 발생 시 기본적으로 잠금 해제 상태로 설정
       setIsLocked(false);
-      setInitialRouteName('Feed');
+    }
+  };
+
+  const handleGoogleLoginSuccess = (user: GoogleUser) => {
+    setGoogleUser(user);
+    setInitialRouteName('Feed');
+    // 네비게이션을 Feed 화면으로 이동
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Feed');
+    }
+  };
+
+  const handleSkipLogin = () => {
+    setGoogleUser(null);
+    setInitialRouteName('Feed');
+    // 네비게이션을 Feed 화면으로 이동
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Feed');
     }
   };
 
@@ -218,6 +249,25 @@ export default function AppNavigator() {
           },
         }}
       >
+        <Stack.Screen
+          name="LoginChoice"
+          options={{ headerShown: false }}
+        >
+          {() => (
+            <LoginChoiceScreen
+              onLoginSuccess={handleGoogleLoginSuccess}
+              onSkipLogin={handleSkipLogin}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen
+          name="UserProfile"
+          component={UserProfileScreen}
+          options={{
+            title: '프로필',
+            headerBackTitle: '뒤로',
+          }}
+        />
         <Stack.Screen
           name="AppLock"
           component={AppLockScreen}

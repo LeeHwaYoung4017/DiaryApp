@@ -76,6 +76,8 @@ export interface SearchOptions {
 
 // 네비게이션 타입 정의
 export type RootStackParamList = {
+  LoginChoice: undefined;
+  UserProfile: undefined;
   Feed: undefined;
   Write: { diaryId?: string };
   Edit: { diaryId: string };
